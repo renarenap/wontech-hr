@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, Y } from '../lib/constants'
-import { Bd, Check, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
+import { Bd, Check, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+
+const DEFAULT_TASKS = [
+  '입사 오리엔테이션', '사내 시스템 교육', '부서 업무 소개', '보안 서약서 제출',
+  '멘토 1:1 (1차)', '1개월 적응 면담', '2개월 중간 면담', '수습 평가 (3개월)',
+]
 
 function daysIn(joinDate) {
   const j = new Date(joinDate)
@@ -22,21 +27,18 @@ export default function Onboarding() {
   const [list, setList] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data, error } = await supabase
-        .from('onboarding')
-        .select('*, employees(name, dept, team, rank), onboarding_tasks(*)')
-        .order('join_date', { ascending: false })
-      if (cancelled) return
-      if (error) { setError(error); return }
-      setList((data || []).map(withDerived))
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  const load = async () => {
+    const { data, error } = await supabase
+      .from('onboarding')
+      .select('*, employees(name, dept, team, rank), onboarding_tasks(*)')
+      .order('join_date', { ascending: false })
+    if (error) { setError(error); return }
+    setList((data || []).map(withDerived))
+  }
+
+  useEffect(() => { load() }, [])
 
   const toggle = async (taskId, current) => {
     setList(list.map((o) => (
@@ -48,6 +50,14 @@ export default function Onboarding() {
     if (error) setError(error)
   }
 
+  const remove = async (o) => {
+    if (!window.confirm(`${o.employees?.name || '이 사람'}의 온보딩 항목을 삭제할까요? (직원 정보 자체는 유지됩니다)`)) return
+    const { error } = await supabase.from('onboarding').delete().eq('id', o.id)
+    if (error) { setError(error); return }
+    setList(list.filter((x) => x.id !== o.id))
+    if (sel === o.id) setSel(null)
+  }
+
   if (error) return <ErrorBox error={error} />
   if (!list) return <Loading />
 
@@ -55,6 +65,9 @@ export default function Onboarding() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <AddButton onClick={() => setShowAdd(true)}>+ 온보딩 대상 추가</AddButton>
+      </div>
       <KpiRow items={[
         { v: list.length, l: '온보딩 진행중', c: P },
         { v: list.filter((o) => o.pct >= 80).length, l: '거의 완료', c: G },
@@ -66,7 +79,7 @@ export default function Onboarding() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>신규 입사자</div>
           {list.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '소속', '직급', '입사일', 'D+', '멘토', '진행률'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['이름', '소속', '직급', '입사일', 'D+', '멘토', '진행률', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {list.map((o) => {
                   const e = o.employees || {}
@@ -82,6 +95,7 @@ export default function Onboarding() {
                       <td style={tdS}><Bd color={o.daysIn > 60 ? Y : P} bg={o.daysIn > 60 ? '#fef9c3' : '#f3e8ff'}>D+{o.daysIn}</Bd></td>
                       <td style={tdS}>{o.mentor}</td>
                       <td style={tdS}><Prog current={o.done} max={o.total || 1} /></td>
+                      <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e2) => { e2.stopPropagation(); remove(o) }}>삭제</button></td>
                     </tr>
                   )
                 })}
@@ -104,6 +118,78 @@ export default function Onboarding() {
           </div>
         )}
       </div>
+      {showAdd && <AddOnboardingModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load() }} />}
     </div>
+  )
+}
+
+function AddOnboardingModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', dept: '', team: '', rank: '', track: '사무', join_date: '', mentor: '' })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+
+    // 1) 승진포인트 대상 employees 레코드 생성 (기본값: 연차 0, 체류연한 4년, 기준 24P — 필요시 포인트 현황에서 조정)
+    const { data: emp, error: e1 } = await supabase
+      .from('employees')
+      .insert({
+        name: form.name, dept: form.dept, team: form.team || null, rank: form.rank,
+        track: form.track, role: '팀원', level: 0, req_tenure: 4, threshold: 24, base_pts: 0,
+      })
+      .select()
+      .single()
+    if (e1) { setError(e1.message); setSaving(false); return }
+
+    // 2) 온보딩 레코드 생성
+    const { data: ob, error: e2 } = await supabase
+      .from('onboarding')
+      .insert({ employee_id: emp.id, join_date: form.join_date, mentor: form.mentor || null })
+      .select()
+      .single()
+    if (e2) { setError(e2.message); setSaving(false); return }
+
+    // 3) 기본 체크리스트 생성
+    const tasks = DEFAULT_TASKS.map((t, i) => ({ onboarding_id: ob.id, task_name: t, done: false, sort_order: i }))
+    const { error: e3 } = await supabase.from('onboarding_tasks').insert(tasks)
+    setSaving(false)
+    if (e3) { setError(e3.message); return }
+    onCreated()
+  }
+
+  return (
+    <Modal title="온보딩 대상 추가" onClose={onClose}>
+      <form onSubmit={submit}>
+        <label style={lbl}>이름</label>
+        <input style={field} required value={form.name} onChange={set('name')} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>직군</label>
+            <select style={field} value={form.track} onChange={set('track')}>
+              <option value="사무">사무</option><option value="연구">연구</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>입사일</label><input style={field} type="date" required value={form.join_date} onChange={set('join_date')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>멘토</label><input style={field} value={form.mentor} onChange={set('mentor')} /></div>
+        </div>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>체크리스트 8개 항목이 기본으로 생성됩니다.</div>
+        {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button type="button" style={btnGhost} onClick={onClose}>취소</button>
+          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '저장 중…' : '추가'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

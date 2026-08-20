@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { callAdminUsers } from '../lib/adminApi'
-import { O, P, G } from '../lib/constants'
-import { Bd, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState } from '../components/ui'
+import { O, P } from '../lib/constants'
+import { Bd, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label, btnPrimary, btnGhost } from '../components/ui'
 
 const ROLES = ['관리자', '팀장', '팀원']
 const ROLE_COLOR = { 관리자: { c: O, bg: '#fff7ed' }, 팀장: { c: P, bg: '#f3e8ff' }, 팀원: { c: '#475569', bg: '#f1f5f9' } }
@@ -12,22 +12,6 @@ function genPassword() {
   for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)]
   return s
 }
-
-function Modal({ title, onClose, children }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 380, background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>{title}</div>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-const field = { width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', marginBottom: 10 }
-const label = { display: 'block', fontSize: 11, color: '#64748b', marginBottom: 5, fontWeight: 600 }
-const btnPrimary = { background: O, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }
-const btnGhost = { background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 16px', fontSize: 12, color: '#64748b', cursor: 'pointer' }
 
 export default function AccountManage() {
   const [users, setUsers] = useState(null)

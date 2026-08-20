@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, B, Y } from '../lib/constants'
-import { Bd, Check, DdayBd, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom } from '../components/ui'
+import { Bd, Check, DdayBd, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
   ['offer_sent', '오퍼레터 발송'],
@@ -22,18 +22,15 @@ export default function Hire() {
   const [hires, setHires] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data, error } = await supabase.from('hires').select('*').order('join_date')
-      if (cancelled) return
-      if (error) { setError(error); return }
-      setHires((data || []).map(withDerived))
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  const load = async () => {
+    const { data, error } = await supabase.from('hires').select('*').order('join_date')
+    if (error) { setError(error); return }
+    setHires((data || []).map(withDerived))
+  }
+
+  useEffect(() => { load() }, [])
 
   const toggle = async (field) => {
     const h = hires.find((x) => x.id === sel)
@@ -44,6 +41,14 @@ export default function Hire() {
     if (error) setError(error)
   }
 
+  const remove = async (h) => {
+    if (!window.confirm(`${h.name} 입사 항목을 삭제할까요?`)) return
+    const { error } = await supabase.from('hires').delete().eq('id', h.id)
+    if (error) { setError(error); return }
+    setHires(hires.filter((x) => x.id !== h.id))
+    if (sel === h.id) setSel(null)
+  }
+
   if (error) return <ErrorBox error={error} />
   if (!hires) return <Loading />
 
@@ -52,6 +57,9 @@ export default function Hire() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <AddButton onClick={() => setShowAdd(true)}>+ 입사자 추가</AddButton>
+      </div>
       <KpiRow items={[
         { v: hires.length, l: '입사 예정', c: P },
         { v: hires.filter((h) => h.status === '입사확정').length, l: '입사 확정', c: G },
@@ -63,7 +71,7 @@ export default function Hire() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>입사 예정자</div>
           {hires.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['이름', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {hires.map((h) => {
                   const st = stCfg[h.status] || { c: '#64748b', bg: '#f1f5f9' }
@@ -80,6 +88,7 @@ export default function Hire() {
                       <td style={tdS}><DdayBd d={h.dDay} /></td>
                       <td style={tdS}><Bd color={st.c} bg={st.bg}>{h.status}</Bd></td>
                       <td style={tdS}><Prog current={h.done} max={h.total} /></td>
+                      <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(h) }}>삭제</button></td>
                     </tr>
                   )
                 })}
@@ -97,12 +106,63 @@ export default function Hire() {
               <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>준비율</div><div style={{ fontSize: 14, fontWeight: 600, color: s.pct >= 100 ? G : P }}>{s.pct}%</div></div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📋 입사 준비 체크리스트</div>
-            {CHECK_FIELDS.map(([f, label]) => (
-              <Check key={f} done={s[f]} label={label} onToggle={() => toggle(f)} />
+            {CHECK_FIELDS.map(([f, text]) => (
+              <Check key={f} done={s[f]} label={text} onToggle={() => toggle(f)} />
             ))}
           </div>
         )}
       </div>
+      {showAdd && <AddHireModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load() }} />}
     </div>
+  )
+}
+
+function AddHireModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', dept: '', team: '', rank: '', hire_type: '경력', join_date: '', status: '처우협의중' })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    const { error } = await supabase.from('hires').insert({ ...form, team: form.team || null })
+    setSaving(false)
+    if (error) { setError(error.message); return }
+    onCreated()
+  }
+
+  return (
+    <Modal title="입사 예정자 추가" onClose={onClose}>
+      <form onSubmit={submit}>
+        <label style={lbl}>이름</label>
+        <input style={field} required value={form.name} onChange={set('name')} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>채용유형</label>
+            <select style={field} value={form.hire_type} onChange={set('hire_type')}>
+              <option value="경력">경력</option><option value="신입">신입</option>
+            </select>
+          </div>
+        </div>
+        <label style={lbl}>입사 예정일</label>
+        <input style={field} type="date" required value={form.join_date} onChange={set('join_date')} />
+        <label style={lbl}>상태</label>
+        <select style={field} value={form.status} onChange={set('status')}>
+          <option value="처우협의중">처우협의중</option><option value="입사확정">입사확정</option>
+        </select>
+        {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button type="button" style={btnGhost} onClick={onClose}>취소</button>
+          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '저장 중…' : '추가'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

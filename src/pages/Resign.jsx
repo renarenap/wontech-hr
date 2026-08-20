@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, O, R } from '../lib/constants'
-import { Bd, Check, DdayBd, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom } from '../components/ui'
+import { Bd, Check, DdayBd, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
   ['handover_done', '업무 인수인계 완료'],
@@ -21,18 +21,15 @@ export default function Resign() {
   const [list, setList] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
+  const [showAdd, setShowAdd] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const { data, error } = await supabase.from('resignations').select('*').order('last_day')
-      if (cancelled) return
-      if (error) { setError(error); return }
-      setList((data || []).map(withDerived))
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  const load = async () => {
+    const { data, error } = await supabase.from('resignations').select('*').order('last_day')
+    if (error) { setError(error); return }
+    setList((data || []).map(withDerived))
+  }
+
+  useEffect(() => { load() }, [])
 
   const toggle = async (field) => {
     const r = list.find((x) => x.id === sel)
@@ -43,6 +40,14 @@ export default function Resign() {
     if (error) setError(error)
   }
 
+  const remove = async (r) => {
+    if (!window.confirm(`${r.name} 퇴사 항목을 삭제할까요?`)) return
+    const { error } = await supabase.from('resignations').delete().eq('id', r.id)
+    if (error) { setError(error); return }
+    setList(list.filter((x) => x.id !== r.id))
+    if (sel === r.id) setSel(null)
+  }
+
   if (error) return <ErrorBox error={error} />
   if (!list) return <Loading />
 
@@ -51,6 +56,9 @@ export default function Resign() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <AddButton onClick={() => setShowAdd(true)}>+ 퇴사자 추가</AddButton>
+      </div>
       <KpiRow items={[
         { v: list.length, l: '퇴사 건수', c: P },
         { v: list.filter((r) => r.status === '진행중').length, l: '진행중', c: O },
@@ -62,7 +70,7 @@ export default function Resign() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>퇴사 현황</div>
           {list.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '소속', '직급', '사유', '퇴사 신청일', '최종 근무일', 'D-Day', '상태', '처리율'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['이름', '소속', '직급', '사유', '퇴사 신청일', '최종 근무일', 'D-Day', '상태', '처리율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {list.map((r) => {
                   const st = stCfg[r.status] || stCfg['완료']
@@ -80,6 +88,7 @@ export default function Resign() {
                       <td style={tdS}><DdayBd d={r.dDay} /></td>
                       <td style={tdS}><Bd color={st.c} bg={st.bg}>{r.status}</Bd></td>
                       <td style={tdS}><Prog current={r.done} max={r.total} /></td>
+                      <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(r) }}>삭제</button></td>
                     </tr>
                   )
                 })}
@@ -97,12 +106,65 @@ export default function Resign() {
               <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>D-Day</div><div style={{ fontSize: 14, fontWeight: 600, color: s.dDay <= 0 ? '#64748b' : R }}>{s.dDay <= 0 ? '퇴사 완료' : `D-${s.dDay}`}</div></div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📋 퇴사 처리 체크리스트</div>
-            {CHECK_FIELDS.map(([f, label]) => (
-              <Check key={f} done={s[f]} label={label} onToggle={() => toggle(f)} />
+            {CHECK_FIELDS.map(([f, text]) => (
+              <Check key={f} done={s[f]} label={text} onToggle={() => toggle(f)} />
             ))}
           </div>
         )}
       </div>
+      {showAdd && <AddResignModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load() }} />}
     </div>
+  )
+}
+
+function AddResignModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({ name: '', dept: '', team: '', rank: '', reason: '개인사유', submit_date: '', last_day: '', status: '진행중' })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    const { error } = await supabase.from('resignations').insert({ ...form, team: form.team || null })
+    setSaving(false)
+    if (error) { setError(error.message); return }
+    onCreated()
+  }
+
+  return (
+    <Modal title="퇴사자 추가" onClose={onClose}>
+      <form onSubmit={submit}>
+        <label style={lbl}>이름</label>
+        <input style={field} required value={form.name} onChange={set('name')} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>사유</label>
+            <select style={field} value={form.reason} onChange={set('reason')}>
+              <option value="개인사유">개인사유</option><option value="이직">이직</option><option value="계약만료">계약만료</option><option value="기타">기타</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>퇴사 신청일</label><input style={field} type="date" required value={form.submit_date} onChange={set('submit_date')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>최종 근무일</label><input style={field} type="date" required value={form.last_day} onChange={set('last_day')} /></div>
+        </div>
+        <label style={lbl}>상태</label>
+        <select style={field} value={form.status} onChange={set('status')}>
+          <option value="진행중">진행중</option><option value="완료">완료</option>
+        </select>
+        {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button type="button" style={btnGhost} onClick={onClose}>취소</button>
+          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '저장 중…' : '추가'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

@@ -1,4 +1,4 @@
-import { GRADE_LABEL, GRADE_COLOR, STATUS_LABEL, G, P, Y, R, B } from '../lib/constants'
+import { GRADE_LABEL, GRADE_COLOR, STATUS_LABEL, G, P, Y, R, B, O } from '../lib/constants'
 
 // ═══ 공통 스타일 ═══
 export const thS = {
@@ -110,4 +110,26 @@ export function ErrorBox({ error }) {
 
 export function EmptyState({ label = '데이터가 없습니다' }) {
   return <div style={{ padding: 30, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>{label}</div>
+}
+
+// ═══ 폼 / 모달 공통 요소 ═══
+export const field = { width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', fontSize: 13, outline: 'none', marginBottom: 10, boxSizing: 'border-box' }
+export const label = { display: 'block', fontSize: 11, color: '#64748b', marginBottom: 5, fontWeight: 600 }
+export const btnPrimary = { background: O, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }
+export const btnGhost = { background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 16px', fontSize: 12, color: '#64748b', cursor: 'pointer' }
+export const btnDanger = { ...btnGhost, color: '#dc2626', borderColor: '#fecaca' }
+
+export function Modal({ title, onClose, children, width = 380 }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '92vw', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>{title}</div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+export function AddButton({ children = '+ 추가', onClick }) {
+  return <button style={btnPrimary} onClick={onClick}>{children}</button>
 }
