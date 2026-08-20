@@ -1,0 +1,73 @@
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { AuthProvider, useAuth } from './lib/auth'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import EmployeeList from './pages/EmployeeList'
+import EmployeeDetail from './pages/EmployeeDetail'
+import Criteria from './pages/Criteria'
+import Hire from './pages/Hire'
+import Onboarding from './pages/Onboarding'
+import Transfer from './pages/Transfer'
+import Resign from './pages/Resign'
+import Recruit from './pages/Recruit'
+import AccountManage from './pages/AccountManage'
+
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+  if (loading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 13 }}>
+        불러오는 중…
+      </div>
+    )
+  }
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />
+  return children
+}
+
+function RedirectIfAuthed({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return null
+  if (user) return <Navigate to="/" replace />
+  return children
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <HashRouter>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <RedirectIfAuthed>
+                <Login />
+              </RedirectIfAuthed>
+            }
+          />
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/employees" element={<EmployeeList />} />
+            <Route path="/employees/:id" element={<EmployeeDetail />} />
+            <Route path="/criteria" element={<Criteria />} />
+            <Route path="/hire" element={<Hire />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/transfer" element={<Transfer />} />
+            <Route path="/resign" element={<Resign />} />
+            <Route path="/recruit" element={<Recruit />} />
+            <Route path="/accounts" element={<AccountManage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </HashRouter>
+    </AuthProvider>
+  )
+}
