@@ -3,12 +3,17 @@
 승진포인트 관리 + 인사관리(입사/온보딩/발령/퇴사) + 채용현황을 한 곳에서 보는 사내 HR 대시보드.
 Vite + React + React Router + Supabase(Auth/DB)로 구성되어 있고, GitHub Pages에 배포합니다.
 
-## 0. 진행 상태
+**배포 완료**: https://renarenap.github.io/wontech-hr/
+저장소: https://github.com/renarenap/wontech-hr — `main` 브랜치에 push할 때마다 자동 재배포됩니다.
 
-- ✅ Node.js 설치 완료, `npm install` / `npm run build` 정상 동작 확인 완료.
-- ✅ Supabase 테이블 생성(`schema.sql`) + 샘플 데이터(`seed.sql`) 적재 완료.
-- ⬜ **GitHub 저장소 이름 확정** — `vite.config.js`의 `base: '/wontech-hr/'`는 임시값입니다. 실제 저장소 이름이 다르면 이 값과 아래 배포 URL을 저장소 이름에 맞게 바꿔야 합니다.
-- ⬜ **admin-users Edge Function 배포** — 앱 안의 "계정 관리" 페이지가 동작하려면 아래 3번 섹션을 따라 한 번 배포해야 합니다 (계정 관리에 관리자 권한(personal access token)이 필요해서 이 단계는 직접 실행해주셔야 해요).
+## 0. 진행 상태 (전부 완료)
+
+- ✅ Node.js / npm 설치, `npm install` / `npm run build` 정상 동작 확인
+- ✅ Supabase 테이블 생성(`schema.sql`) + 샘플 데이터(`seed.sql`) 적재
+- ✅ 관리자 계정 생성 (wowbagger12@gmail.com)
+- ✅ admin-users Edge Function 배포 및 동작 확인
+- ✅ GitHub 저장소 연결, Secrets 등록, Pages(GitHub Actions) 설정
+- ✅ 실제 배포 사이트에서 로그인 → 대시보드 → 계정 관리까지 동작 확인 완료
 
 ## 1. Supabase 설정
 
@@ -46,25 +51,20 @@ npx supabase functions deploy admin-users
 - 배포 후 앱에서 로그인 → **관리자 → 계정 관리**로 들어가면 바로 사용 가능합니다. (배포 전에는 이 페이지가 오류를 표시합니다.)
 - 코드를 수정하면 `npx supabase functions deploy admin-users`만 다시 실행하면 됩니다.
 
-## 4. GitHub 저장소 연결 & 배포 (GitHub Actions 자동배포)
+## 4. GitHub 저장소 연결 & 배포 (완료됨 — 참고용)
 
-1. 이 폴더를 저장소에 push:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: WONTECH HR 관리 시스템"
-   git branch -M main
-   git remote add origin https://github.com/<owner>/<repo>.git
-   git push -u origin main
-   ```
-2. 저장소 **Settings → Secrets and variables → Actions → New repository secret**에 다음 2개를 등록:
-   - `VITE_SUPABASE_URL` = `https://ybkkvuuvkyqkylzsrgny.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY` = (`.env`의 publishable key 값)
-3. 저장소 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 설정.
-4. `main` 브랜치에 push할 때마다 [.github/workflows/deploy.yml](.github/workflows/deploy.yml)이 자동으로 빌드 + 배포합니다. 배포 후 URL은 `https://<owner>.github.io/<repo>/` 형태입니다.
-5. 저장소 이름이 `wontech-hr`가 아니라면 [vite.config.js](vite.config.js)의 `base` 값을 저장소 이름에 맞게 수정하고 다시 push하세요.
+- 저장소: https://github.com/renarenap/wontech-hr (연결 완료)
+- Secrets 등록 완료: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- Pages source: **GitHub Actions**로 설정 완료
+- 배포 URL: **https://renarenap.github.io/wontech-hr/**
 
-수동 배포가 필요하면 `npm run deploy` (로컬에서 `gh-pages` 패키지로 `dist`를 `gh-pages` 브랜치에 push, Pages 소스를 그 브랜치로 설정한 경우에만 유효)도 준비되어 있습니다.
+앞으로는 이 폴더에서 코드를 수정하고 `main` 브랜치에 push만 하면 [.github/workflows/deploy.yml](.github/workflows/deploy.yml)이 자동으로 빌드 + 배포합니다.
+
+```bash
+git add .
+git commit -m "설명"
+git push
+```
 
 ## 5. 폴더 구조
 
