@@ -42,7 +42,10 @@ export default function Layout() {
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, overflow: 'hidden' }}>
       <div style={{ width: 220, background: '#fff', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid var(--border)' }}>
+        <div
+          onClick={() => navigate('/')}
+          style={{ padding: '22px 20px 18px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+        >
           <div style={{ fontSize: 16, fontWeight: 800, color: O, letterSpacing: 1 }}>WONTECH</div>
           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>HR 관리 시스템</div>
         </div>

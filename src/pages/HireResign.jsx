@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { R, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, RANK_DEFAULTS } from '../lib/constants'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, RANK_DEFAULTS } from '../lib/constants'
 import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
@@ -78,8 +78,8 @@ export default function HireResign() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
         <button style={btnGhost} onClick={() => setShowImport(true)}>📄 변동현황 워드파일 업로드</button>
-        <button style={{ ...btnPrimary, background: R }} onClick={() => setShowAddResign(true)}>− 퇴사자 등록</button>
-        <button style={btnPrimary} onClick={() => setShowAddHire(true)}>+ 입사자 등록</button>
+        <button style={{ ...btnPrimary, background: O }} onClick={() => setShowAddResign(true)}>− 퇴사자 등록</button>
+        <button style={{ ...btnPrimary, background: G }} onClick={() => setShowAddHire(true)}>+ 입사자 등록</button>
       </div>
 
       <SectionTitle icon="📥">입사 예정자</SectionTitle>
@@ -174,14 +174,11 @@ function QuickAddHireModal({ onClose, onCreated }) {
             {EXEC_RANKS.map((r) => <option key={r} value={r}>{r}</option>)}
           </optgroup>
         </select>
-        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
-          임원은 명단에는 포함되지만 승진포인트 추적 대상은 아니에요 (체류연한·기준P 없음).
-        </div>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btnGhost} onClick={onClose}>취소</button>
-          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '등록 중…' : '등록'}</button>
+          <button type="submit" style={{ ...btnPrimary, background: G }} disabled={saving}>{saving ? '등록 중…' : '등록'}</button>
         </div>
       </form>
     </Modal>
@@ -272,7 +269,7 @@ function QuickAddResignModal({ onClose, onCreated }) {
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btnGhost} onClick={onClose}>취소</button>
-          <button type="submit" style={{ ...btnPrimary, background: R }} disabled={saving}>{saving ? '처리 중…' : '퇴사 처리'}</button>
+          <button type="submit" style={{ ...btnPrimary, background: O }} disabled={saving}>{saving ? '처리 중…' : '퇴사 처리'}</button>
         </div>
       </form>
     </Modal>
