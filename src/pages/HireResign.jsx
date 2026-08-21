@@ -536,7 +536,10 @@ function ArchiveList({ onRestored }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.from('employees_archive').select('*').order('resign_date', { ascending: false }).then(({ data }) => setList(data || []))
+    supabase.from('employees_archive').select('*').order('resign_date', { ascending: false }).then(({ data, error: err }) => {
+      if (err) { setError(err.message); setList([]); return }
+      setList(data || [])
+    })
   }, [])
 
   const restore = async (a) => {
