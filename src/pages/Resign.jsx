@@ -17,7 +17,7 @@ function withDerived(r) {
   return { ...r, done, total, pct: Math.round((done / total) * 100), dDay: dDayFrom(r.last_day) }
 }
 
-export default function Resign() {
+export default function Resign({ hideAdd = false }) {
   const [list, setList] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
@@ -56,9 +56,11 @@ export default function Resign() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AddButton onClick={() => setShowAdd(true)}>+ 퇴사자 추가</AddButton>
-      </div>
+      {!hideAdd && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <AddButton onClick={() => setShowAdd(true)}>+ 퇴사자 추가</AddButton>
+        </div>
+      )}
       <KpiRow items={[
         { v: list.length, l: '퇴사 건수', c: P },
         { v: list.filter((r) => r.status === '진행중').length, l: '진행중', c: O },

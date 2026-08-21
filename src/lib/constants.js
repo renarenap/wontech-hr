@@ -40,6 +40,18 @@ export function sortByPeriod(list) {
   return [...list].sort((a, b) => periodSortKey(a.period) - periodSortKey(b.period))
 }
 
+// ═══ 직급 체계 (승진포인트 추적 대상만 — 임원급(이사 이상)은 이 시스템의 대상이 아님) ═══
+export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
+export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
+
+// 직급별 체류연한/진급포인트 기본값 (기준표 ⑤ 참고 — 신규 입사자 등록 시 자동 적용)
+export const RANK_DEFAULTS = {
+  사원: { req_tenure: 4, threshold: 24 }, 대리: { req_tenure: 4, threshold: 24 },
+  과장: { req_tenure: 5, threshold: 35 }, 차장: { req_tenure: 5, threshold: 36 }, 부장: { req_tenure: 5, threshold: 40 },
+  연구원: { req_tenure: 4, threshold: 24 }, 전임연구원: { req_tenure: 4, threshold: 24 },
+  선임연구원: { req_tenure: 6, threshold: 40 }, 책임연구원: { req_tenure: 7, threshold: 48 }, 수석연구원: { req_tenure: 4, threshold: 32 },
+}
+
 // ═══ 직원 파생 필드 계산 ═══
 // employee: employees 테이블 row, evalPtsSum: evaluations.points 합계
 export function deriveEmployee(employee, evalPtsSum = 0) {

@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { P, G, O, Y } from '../lib/constants'
 import { Bd, Check, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
-const DEFAULT_TASKS = [
+export const DEFAULT_TASKS = [
   '입사 오리엔테이션', '사내 시스템 교육', '부서 업무 소개', '보안 서약서 제출',
   '멘토 1:1 (1차)', '1개월 적응 면담', '2개월 중간 면담', '수습 평가 (3개월)',
 ]
@@ -23,7 +23,7 @@ function withDerived(o) {
   return { ...o, tasks, done, total: tasks.length, pct: Math.round((done / total) * 100), daysIn: daysIn(o.join_date) }
 }
 
-export default function Onboarding() {
+export default function Onboarding({ hideAdd = false }) {
   const [list, setList] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
@@ -65,9 +65,11 @@ export default function Onboarding() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AddButton onClick={() => setShowAdd(true)}>+ 온보딩 대상 추가</AddButton>
-      </div>
+      {!hideAdd && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <AddButton onClick={() => setShowAdd(true)}>+ 온보딩 대상 추가</AddButton>
+        </div>
+      )}
       <KpiRow items={[
         { v: list.length, l: '온보딩 진행중', c: P },
         { v: list.filter((o) => o.pct >= 80).length, l: '거의 완료', c: G },

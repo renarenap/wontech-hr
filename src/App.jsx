@@ -9,10 +9,8 @@ import Dashboard from './pages/Dashboard'
 import EmployeeList from './pages/EmployeeList'
 import EmployeeDetail from './pages/EmployeeDetail'
 import Criteria from './pages/Criteria'
-import Hire from './pages/Hire'
-import Onboarding from './pages/Onboarding'
+import HireResign from './pages/HireResign'
 import Transfer from './pages/Transfer'
-import Resign from './pages/Resign'
 import Recruit from './pages/Recruit'
 import AccountManage from './pages/AccountManage'
 
@@ -79,10 +77,12 @@ export default function App() {
             <Route path="/employees" element={<EmployeeList />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/criteria" element={<Criteria />} />
-            <Route path="/hire" element={<Hire />} />
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/hire-resign" element={<HireResign />} />
+            {/* 예전 주소 호환용 리다이렉트 */}
+            <Route path="/hire" element={<Navigate to="/hire-resign" replace />} />
+            <Route path="/resign" element={<Navigate to="/hire-resign" replace />} />
+            <Route path="/onboarding" element={<Navigate to="/hire-resign" replace />} />
             <Route path="/transfer" element={<Transfer />} />
-            <Route path="/resign" element={<Resign />} />
             <Route path="/recruit" element={<Recruit />} />
             <Route path="/accounts" element={<AccountManage />} />
           </Route>

@@ -6,10 +6,8 @@ const NAV = [
   { to: '/', icon: '📊', label: '대시보드', g: '승진포인트', end: true },
   { to: '/employees', icon: '👥', label: '포인트 현황', g: '승진포인트' },
   { to: '/criteria', icon: '📋', label: '기준표', g: '승진포인트' },
-  { to: '/hire', icon: '📥', label: '입사', g: '인사관리' },
-  { to: '/onboarding', icon: '🚀', label: '온보딩', g: '인사관리' },
+  { to: '/hire-resign', icon: '🔁', label: '입·퇴사 관리', g: '인사관리' },
   { to: '/transfer', icon: '🔀', label: '발령', g: '인사관리' },
-  { to: '/resign', icon: '📤', label: '퇴사', g: '인사관리' },
   { to: '/recruit', icon: '📢', label: '채용현황', g: '채용' },
   { to: '/accounts', icon: '🔑', label: '계정 관리', g: '관리자' },
 ]
@@ -18,10 +16,8 @@ const TITLES = {
   '/': '승진포인트 대시보드',
   '/employees': '승진포인트 현황',
   '/criteria': '기준표',
-  '/onboarding': '온보딩 관리',
   '/recruit': '채용 현황',
-  '/hire': '입사 관리',
-  '/resign': '퇴사 관리',
+  '/hire-resign': '입·퇴사 관리',
   '/transfer': '발령 관리',
   '/accounts': '계정 관리',
 }

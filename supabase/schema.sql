@@ -91,6 +91,19 @@ create table if not exists resignations (
   created_at timestamptz default now()
 );
 
+-- 퇴사자 아카이브 (employees에서 삭제되는 직원의 스냅샷 보관)
+create table if not exists employees_archive (
+  id uuid primary key default gen_random_uuid(),
+  original_id uuid,
+  name text not null,
+  dept text, team text, rank text, track text, role text,
+  level int, req_tenure int, threshold int,
+  base_pts numeric, eng_pts numeric, eng2_pts numeric, cert_pts numeric, award_pts numeric,
+  evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
+  resign_date date not null,
+  archived_at timestamptz default now()
+);
+
 -- 발령 관리 (승진/부서이동/파견/직무변경)
 create table if not exists transfers (
   id uuid primary key default gen_random_uuid(),
@@ -134,6 +147,7 @@ create table if not exists recruit_candidates (
 -- ═══════════════════════════════════════════════════════════
 
 alter table employees enable row level security;
+alter table employees_archive enable row level security;
 alter table evaluations enable row level security;
 alter table onboarding enable row level security;
 alter table onboarding_tasks enable row level security;
@@ -148,7 +162,7 @@ declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','evaluations','onboarding','onboarding_tasks',
+    'employees','employees_archive','evaluations','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop

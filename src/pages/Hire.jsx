@@ -18,7 +18,7 @@ function withDerived(h) {
   return { ...h, done, total, pct: Math.round((done / total) * 100), dDay: dDayFrom(h.join_date) }
 }
 
-export default function Hire() {
+export default function Hire({ hideAdd = false }) {
   const [hires, setHires] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null)
@@ -57,9 +57,11 @@ export default function Hire() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <AddButton onClick={() => setShowAdd(true)}>+ 입사자 추가</AddButton>
-      </div>
+      {!hideAdd && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <AddButton onClick={() => setShowAdd(true)}>+ 입사자 추가</AddButton>
+        </div>
+      )}
       <KpiRow items={[
         { v: hires.length, l: '입사 예정', c: P },
         { v: hires.filter((h) => h.status === '입사확정').length, l: '입사 확정', c: G },
