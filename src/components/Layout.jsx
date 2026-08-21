@@ -50,13 +50,9 @@ function useHrSummary() {
     const { start, end } = monthRange()
 
     async function load() {
-      const [
-        totalRes,
-        hiresRes,
-        resignsRes,
-        empLatest,
-        archiveLatest,
-      ] = await Promise.all([
+      // Promise.all은 하나만 실패해도 전체가 실패하므로, 각각 독립적으로 처리해서
+      // 일부만 실패해도 나머지는 보여준다.
+      const results = await Promise.allSettled([
         supabase.from('employees').select('id', { count: 'exact', head: true }),
         supabase.from('hires').select('id', { count: 'exact', head: true }).gte('join_date', start).lt('join_date', end),
         supabase.from('employees_archive').select('id', { count: 'exact', head: true }).gte('resign_date', start).lt('resign_date', end),
@@ -65,17 +61,20 @@ function useHrSummary() {
       ])
       if (cancelled) return
 
-      const dates = [empLatest.data?.[0]?.created_at, archiveLatest.data?.[0]?.archived_at].filter(Boolean)
+      const val = (r) => (r.status === 'fulfilled' ? r.value : null)
+      const [totalRes, hiresRes, resignsRes, empLatest, archiveLatest] = results.map(val)
+
+      const dates = [empLatest?.data?.[0]?.created_at, archiveLatest?.data?.[0]?.archived_at].filter(Boolean)
       const asOf = dates.length ? dates.sort().slice(-1)[0].slice(0, 10) : null
 
       setSummary({
-        total: totalRes.count ?? null,
-        hiresThisMonth: hiresRes.count ?? null,
-        resignsThisMonth: resignsRes.count ?? null,
+        total: totalRes?.count ?? null,
+        hiresThisMonth: hiresRes?.count ?? null,
+        resignsThisMonth: resignsRes?.count ?? null,
         asOf,
       })
     }
-    load()
+    load().catch(() => { if (!cancelled) setSummary({ total: null, hiresThisMonth: null, resignsThisMonth: null, asOf: null }) })
     return () => { cancelled = true }
   }, [])
 
