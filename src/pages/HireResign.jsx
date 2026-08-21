@@ -67,6 +67,35 @@ async function resignEmployee(picked, lastDay) {
   if (e4) throw new Error(e4.message)
 }
 
+// ═══ 공용 로직: 퇴사(삭제) 이력에서 복구 — employees_archive → employees로 되돌림 ═══
+async function restoreEmployee(archived) {
+  const payload = {
+    name: archived.name, dept: archived.dept, team: archived.team, rank: archived.rank,
+    track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure, threshold: archived.threshold,
+    base_pts: archived.base_pts, eng_pts: archived.eng_pts, eng2_pts: archived.eng2_pts, cert_pts: archived.cert_pts, award_pts: archived.award_pts,
+  }
+  if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
+
+  const { data: emp, error: e1 } = await supabase.from('employees').insert(payload).select().single()
+  if (e1) throw new Error(e1.message)
+
+  const snapshot = archived.evaluations_snapshot || []
+  if (snapshot.length > 0) {
+    const { error: e2 } = await supabase.from('evaluations').insert(
+      snapshot.map((ev) => ({ ...ev, employee_id: emp.id }))
+    )
+    if (e2) throw new Error(e2.message)
+  }
+
+  // 복구 대상과 짝이 맞는 퇴사 체크리스트(resignations) 항목이 있으면 같이 제거
+  await supabase.from('resignations').delete().eq('name', archived.name).eq('last_day', archived.resign_date)
+
+  const { error: e3 } = await supabase.from('employees_archive').delete().eq('id', archived.id)
+  if (e3) throw new Error(e3.message)
+
+  return emp
+}
+
 export default function HireResign() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [showAddHire, setShowAddHire] = useState(false)
@@ -92,7 +121,7 @@ export default function HireResign() {
       <Onboarding key={`onboarding-${refreshKey}`} hideAdd />
 
       <SectionTitle icon="🗂">퇴사(삭제) 이력</SectionTitle>
-      <ArchiveList key={`archive-${refreshKey}`} />
+      <ArchiveList key={`archive-${refreshKey}`} onRestored={bump} />
 
       {showAddHire && (
         <QuickAddHireModal onClose={() => setShowAddHire(false)} onCreated={() => { setShowAddHire(false); bump() }} />
@@ -197,7 +226,10 @@ function QuickAddResignModal({ onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('employees').select('*').order('name').then(({ data }) => setEmployees(data || []))
+    supabase.from('employees').select('*, onboarding(join_date)').order('name').then(({ data }) => {
+      const withJoinDate = (data || []).map((e) => ({ ...e, join_date: e.onboarding?.[0]?.join_date || null }))
+      setEmployees(withJoinDate)
+    })
   }, [])
 
   const matches = useMemo(() => {
@@ -247,7 +279,9 @@ function QuickAddResignModal({ onClose, onCreated }) {
                   onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
                 >
                   <span style={{ fontWeight: 600 }}>{e.name}</span>
-                  <span style={{ color: '#94a3b8', marginLeft: 8 }}>{e.dept}{e.team ? ` · ${e.team}` : ''} · {e.rank}</span>
+                  <span style={{ color: '#94a3b8', marginLeft: 8 }}>
+                    {e.dept}{e.team ? ` · ${e.team}` : ''} · {e.rank}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
+                  </span>
                 </div>
               ))}
             </div>
@@ -257,7 +291,10 @@ function QuickAddResignModal({ onClose, onCreated }) {
         {picked && (
           <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12, margin: '10px 0', fontSize: 12, lineHeight: 1.8 }}>
             <div><b>{picked.name}</b> · {picked.track}직 · {picked.rank}</div>
-            <div style={{ color: '#64748b' }}>{picked.dept}{picked.team ? ` · ${picked.team}` : ''}</div>
+            <div style={{ color: '#64748b' }}>
+              {picked.dept}{picked.team ? ` · ${picked.team}` : ''}
+              {picked.join_date ? ` · 입사일 ${picked.join_date}` : ' · 입사일 정보 없음'}
+            </div>
           </div>
         )}
 
@@ -483,20 +520,36 @@ function ChangeGroup({ title, items, checked, onToggle, kind }) {
 }
 
 // ═══ 퇴사(삭제) 이력 뷰어 ═══
-function ArchiveList() {
+function ArchiveList({ onRestored }) {
   const [list, setList] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     supabase.from('employees_archive').select('*').order('resign_date', { ascending: false }).then(({ data }) => setList(data || []))
   }, [])
 
+  const restore = async (a) => {
+    if (!window.confirm(`${a.name}님을 승진포인트 데이터로 복구할까요? (평가 이력 포함)`)) return
+    setError('')
+    setBusyId(a.id)
+    try {
+      await restoreEmployee(a)
+      onRestored?.()
+    } catch (err) {
+      setError(err.message)
+    }
+    setBusyId(null)
+  }
+
   if (!list) return <Loading />
 
   return (
     <div style={crd}>
+      {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
       {list.length === 0 ? <EmptyState label="퇴사(삭제) 이력이 없습니다" /> : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr>{['이름', '소속', '직급', '퇴사일', '보관일시'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead><tr>{['이름', '소속', '직급', '퇴사일', '보관일시', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
             {list.map((a) => (
               <tr key={a.id}>
@@ -505,6 +558,11 @@ function ArchiveList() {
                 <td style={tdS}>{a.rank}</td>
                 <td style={tdS}>{a.resign_date}</td>
                 <td style={{ ...tdS, color: '#94a3b8' }}>{a.archived_at?.slice(0, 10)}</td>
+                <td style={tdS}>
+                  <button style={{ ...btnGhost, padding: '5px 10px' }} disabled={busyId === a.id} onClick={() => restore(a)}>
+                    {busyId === a.id ? '복구 중…' : '↩ 복구'}
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
