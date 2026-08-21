@@ -236,9 +236,14 @@ function QuickAddResignModal({ onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('employees').select('*, onboarding(join_date)').order('name').then(({ data }) => {
-      const withJoinDate = (data || []).map((e) => ({ ...e, join_date: e.onboarding?.[0]?.join_date || null }))
-      setEmployees(withJoinDate)
+    Promise.all([
+      supabase.from('employees').select('*').order('name'),
+      supabase.from('onboarding').select('employee_id, join_date'),
+    ]).then(([{ data: emps, error: e1 }, { data: obs, error: e2 }]) => {
+      if (e1) { setError(e1.message); return }
+      const joinMap = new Map((obs || []).map((o) => [o.employee_id, o.join_date]))
+      setEmployees((emps || []).map((e) => ({ ...e, join_date: joinMap.get(e.id) || null })))
+      if (e2) setError(`(참고) 입사일 정보를 일부 못 불러왔어요: ${e2.message}`)
     })
   }, [])
 
