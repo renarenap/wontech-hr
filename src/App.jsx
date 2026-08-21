@@ -2,6 +2,9 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-d
 import { AuthProvider, useAuth } from './lib/auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import EmployeeList from './pages/EmployeeList'
 import EmployeeDetail from './pages/EmployeeDetail'
@@ -47,6 +50,24 @@ export default function App() {
               </RedirectIfAuthed>
             }
           />
+          <Route
+            path="/signup"
+            element={
+              <RedirectIfAuthed>
+                <Signup />
+              </RedirectIfAuthed>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <RedirectIfAuthed>
+                <ForgotPassword />
+              </RedirectIfAuthed>
+            }
+          />
+          {/* 세션이 없는 상태에서 복구 코드를 교환해야 하므로 인증 가드를 걸지 않음 */}
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             element={
               <RequireAuth>

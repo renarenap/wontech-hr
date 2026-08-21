@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O } from '../lib/constants'
+import { AuthShell, authInput, authLabel, authBtn } from '../components/ui'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -26,39 +26,33 @@ export default function Login() {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)' }}>
-      <form onSubmit={handleSubmit} style={{ width: 340, background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '36px 32px', boxShadow: '0 4px 24px rgba(0,0,0,.06)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: O, letterSpacing: 1 }}>WONTECH</div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>HR 관리 시스템</div>
-        </div>
+    <AuthShell>
+      <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>이메일</label>
+          <label style={authLabel}>이메일</label>
           <input
             type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@wontech.co.kr"
-            style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none' }}
+            placeholder="name@wontech.co.kr" style={authInput}
           />
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>비밀번호</label>
+        <div style={{ marginBottom: 8 }}>
+          <label style={authLabel}>비밀번호</label>
           <input
             type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', fontSize: 13, outline: 'none' }}
+            placeholder="••••••••" style={authInput}
           />
         </div>
+        <div style={{ textAlign: 'right', marginBottom: 20 }}>
+          <Link to="/forgot-password" style={{ fontSize: 11, color: '#94a3b8', textDecoration: 'none' }}>비밀번호를 잊으셨나요?</Link>
+        </div>
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 14 }}>{error}</div>}
-        <button
-          type="submit" disabled={loading}
-          style={{ width: '100%', background: O, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 0', fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1 }}
-        >
+        <button type="submit" disabled={loading} style={{ ...authBtn, cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1 }}>
           {loading ? '로그인 중…' : '로그인'}
         </button>
         <div style={{ marginTop: 16, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-          계정이 없으신가요? 인사팀 관리자에게 초대를 요청하세요.
+          계정이 없으신가요? <Link to="/signup" style={{ color: '#FF4800', fontWeight: 600, textDecoration: 'none' }}>가입하기</Link>
         </div>
       </form>
-    </div>
+    </AuthShell>
   )
 }

@@ -44,9 +44,9 @@ export default function EmployeeDetail() {
   const breakdown = [
     { l: '평가 포인트', v: emp.evalPts, c: O },
     { l: '기본 포인트 (연차)', v: emp.base_pts || 0, c: P },
-    { l: '기술성과 가점 (해외/국제)', v: emp.eng_pts || 0, c: '#0284c7' },
-    { l: '기술성과 가점 (국내)', v: emp.eng2_pts || 0, c: '#14b8a6' },
-    { l: '전문/직무 자격 가점', v: emp.cert_pts || 0, c: '#6366f1' },
+    { l: '영어 가점', v: emp.eng_pts || 0, c: '#0284c7' },
+    { l: '제2외국어 가점', v: emp.eng2_pts || 0, c: '#14b8a6' },
+    { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
     { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
   ]
 

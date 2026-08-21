@@ -10,4 +10,8 @@ if (!url || !anonKey) {
   )
 }
 
-export const supabase = createClient(url, anonKey)
+// flowType: 'pkce' — 비밀번호 재설정/이메일 인증 링크가 '#access_token=...' 형태 대신
+// '?code=...' 형태로 오게 되어, HashRouter(#/경로)와 충돌하지 않습니다.
+export const supabase = createClient(url, anonKey, {
+  auth: { flowType: 'pkce' },
+})
