@@ -40,9 +40,12 @@ export function sortByPeriod(list) {
   return [...list].sort((a, b) => periodSortKey(a.period) - periodSortKey(b.period))
 }
 
-// ═══ 직급 체계 (승진포인트 추적 대상만 — 임원급(이사 이상)은 이 시스템의 대상이 아님) ═══
+// ═══ 직급 체계 ═══
+// 사무직/연구직: 승진포인트 추적 대상 (체류연한·기준P 있음)
+// 임원: 명단/입퇴사 관리용으로만 목록에 포함 — 승진포인트 추적 대상 아님(체류연한·기준P 0)
 export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
 export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
+export const EXEC_RANKS = ['임원']
 
 // 직급별 체류연한/진급포인트 기본값 (기준표 ⑤ 참고 — 신규 입사자 등록 시 자동 적용)
 export const RANK_DEFAULTS = {
@@ -50,6 +53,7 @@ export const RANK_DEFAULTS = {
   과장: { req_tenure: 5, threshold: 35 }, 차장: { req_tenure: 5, threshold: 36 }, 부장: { req_tenure: 5, threshold: 40 },
   연구원: { req_tenure: 4, threshold: 24 }, 전임연구원: { req_tenure: 4, threshold: 24 },
   선임연구원: { req_tenure: 6, threshold: 40 }, 책임연구원: { req_tenure: 7, threshold: 48 }, 수석연구원: { req_tenure: 4, threshold: 32 },
+  임원: { req_tenure: 0, threshold: 0 },
 }
 
 // ═══ 직원 파생 필드 계산 ═══
@@ -61,7 +65,10 @@ export function deriveEmployee(employee, evalPtsSum = 0) {
   const gap = Math.max(0, employee.threshold - currentPts)
   const tenureMet = (employee.level || 0) >= employee.req_tenure
   const ptsMet = currentPts >= employee.threshold
-  const status = ptsMet && tenureMet ? 'possible' : tenureMet && !ptsMet ? 'ptShort' : 'short'
+  // 임원 등 체류연한·기준P가 0으로 설정된(=승진포인트 추적 대상이 아닌) 직급은 별도 상태로 표시
+  const status = !employee.req_tenure && !employee.threshold
+    ? 'na'
+    : ptsMet && tenureMet ? 'possible' : tenureMet && !ptsMet ? 'ptShort' : 'short'
   return { ...employee, evalPts: evalPtsSum, addPts, currentPts, gap, tenureMet, ptsMet, status }
 }
 
@@ -69,4 +76,5 @@ export const STATUS_LABEL = {
   possible: { label: '승진 가능', color: G, bg: '#dcfce7' },
   ptShort: { label: '포인트 부족', color: Y, bg: '#fef9c3' },
   short: { label: '미충족', color: R, bg: '#fee2e2' },
+  na: { label: '해당없음', color: '#94a3b8', bg: '#f1f5f9' },
 }
