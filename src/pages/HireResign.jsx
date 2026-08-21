@@ -43,18 +43,22 @@ async function addHireToRoster({ name, dept, rank, join_date }) {
 
 // ═══ 공용 로직: employees_archive로 스냅샷 이동 후 employees에서 제거 ═══
 async function resignEmployee(picked, lastDay) {
-  const { data: evals, error: e1 } = await supabase.from('evaluations').select('*').eq('employee_id', picked.id)
+  const [{ data: evals, error: e1 }, { data: transfers, error: e0 }] = await Promise.all([
+    supabase.from('evaluations').select('*').eq('employee_id', picked.id),
+    supabase.from('transfers').select('id').eq('employee_id', picked.id),
+  ])
   if (e1) throw new Error(e1.message)
+  if (e0) throw new Error(e0.message)
 
   const { error: e2 } = await supabase.from('employees_archive').insert({
     original_id: picked.id, name: picked.name, dept: picked.dept, team: picked.team, rank: picked.rank,
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, eng2_pts: picked.eng2_pts, cert_pts: picked.cert_pts, award_pts: picked.award_pts,
-    evaluations_snapshot: evals || [], resign_date: lastDay,
+    evaluations_snapshot: evals || [], transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
   })
   if (e2) throw new Error(e2.message)
 
-  // 발령(transfers) 이력은 남기되, employees FK만 풀어줘야 삭제가 막히지 않음
+  // 발령(transfers) 이력은 남기되, employees FK만 풀어줘야 삭제가 막히지 않음 (id는 위에서 저장해뒀다가 복구 시 재연결)
   await supabase.from('transfers').update({ employee_id: null }).eq('employee_id', picked.id)
 
   const { error: e3 } = await supabase.from('employees').delete().eq('id', picked.id)
@@ -85,6 +89,12 @@ async function restoreEmployee(archived) {
       snapshot.map((ev) => ({ ...ev, employee_id: emp.id }))
     )
     if (e2) throw new Error(e2.message)
+  }
+
+  // 퇴사 시점에 저장해둔 발령(transfers) 기록을 복구된 프로필에 다시 연결
+  if (archived.transfer_ids?.length > 0) {
+    const { error: e4 } = await supabase.from('transfers').update({ employee_id: emp.id }).in('id', archived.transfer_ids)
+    if (e4) throw new Error(e4.message)
   }
 
   // 복구 대상과 짝이 맞는 퇴사 체크리스트(resignations) 항목이 있으면 같이 제거

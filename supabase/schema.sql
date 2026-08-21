@@ -100,6 +100,7 @@ create table if not exists employees_archive (
   level int, req_tenure int, threshold int,
   base_pts numeric, eng_pts numeric, eng2_pts numeric, cert_pts numeric, award_pts numeric,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
+  transfer_ids uuid[],              -- 삭제 시점에 이 직원 소유였던 transfers.id 목록 (복구 시 재연결용)
   resign_date date not null,
   archived_at timestamptz default now()
 );
