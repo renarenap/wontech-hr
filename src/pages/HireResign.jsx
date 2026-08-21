@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, RANK_DEFAULTS } from '../lib/constants'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, RANK_DEFAULTS, DEPT_OPTIONS } from '../lib/constants'
 import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
@@ -120,7 +120,9 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
   useEffect(() => {
     supabase.from('employees').select('dept').then(({ data }) => {
-      const uniq = [...new Set((data || []).map((d) => d.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'))
+      // 조직도 기준 파트 목록 + 실제 employees 데이터에 있는 부서를 합쳐서 보여줌
+      const live = (data || []).map((d) => d.dept).filter(Boolean)
+      const uniq = [...new Set([...DEPT_OPTIONS, ...live])].sort((a, b) => a.localeCompare(b, 'ko'))
       setDepts(uniq)
     })
   }, [])
