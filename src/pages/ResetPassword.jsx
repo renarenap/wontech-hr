@@ -15,8 +15,13 @@ export default function ResetPassword() {
 
   useEffect(() => {
     const code = params.get('code')
-    if (!code) { setStatus('invalid'); return }
+    if (!code) {
+      setError(params.get('error_description') || '')
+      setStatus('invalid')
+      return
+    }
     supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) setError(error.message)
       setStatus(error ? 'invalid' : 'ready')
     })
   }, [params])
@@ -49,6 +54,7 @@ export default function ResetPassword() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: '#dc2626' }}>링크가 유효하지 않아요</div>
           <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 24 }}>
             이미 사용된 링크이거나 만료됐어요.<br />요청했던 브라우저가 맞는지도 확인해주세요.
+            {error && <div style={{ marginTop: 10, fontSize: 11, color: '#cbd5e1' }}>({error})</div>}
           </div>
           <Link to="/forgot-password" style={{ ...authBtn, display: 'block', textDecoration: 'none', boxSizing: 'border-box' }}>다시 요청하기</Link>
         </div>
