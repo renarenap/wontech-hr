@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O, P, G, Y, R } from '../lib/constants'
+import { O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
+
+// 임원은 track 값과 무관하게 "승진 기준이 없는 사람"으로 판단 (hasCriteria === false)
+const CATEGORIES = [
+  { key: '사무', label: '사무직', c: '#475569', test: (e) => e.hasCriteria && e.track === '사무' },
+  { key: '사무영어필수', label: '사무직(영어필수)', c: B, test: (e) => e.hasCriteria && e.track === '사무영어필수' },
+  { key: '연구', label: '연구직', c: P, test: (e) => e.hasCriteria && e.track === '연구' },
+  { key: '임원', label: '임원', c: '#92400e', test: (e) => !e.hasCriteria },
+]
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [employees, setEmployees] = useState(null)
   const [error, setError] = useState(null)
+  const [category, setCategory] = useState('사무')
 
   useEffect(() => {
     let cancelled = false
@@ -47,22 +56,30 @@ export default function Dashboard() {
     const short = tracked.filter((e) => e.status === 'short').length
     const avg = total ? (tracked.reduce((a, e) => a + e.currentPts, 0) / total).toFixed(1) : '0.0'
 
-    const byRank = {}
-    employees.forEach((e) => {
-      const r = e.rank
-      if (!byRank[r]) byRank[r] = { t: 0, p: 0, s: 0 }
-      byRank[r].t++
-      if (e.status === 'possible') byRank[r].p++
-      byRank[r].s += e.currentPts
-    })
+    const categoryCounts = Object.fromEntries(CATEGORIES.map((c) => [c.key, employees.filter(c.test).length]))
 
     const imminent = tracked
       .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible')
       .sort((a, b) => b.currentPts / b.threshold - a.currentPts / a.threshold)
       .slice(0, 8)
 
-    return { total, possible, ptShort, tenureShort, engShort, short, avg, byRank, imminent }
+    return { total, possible, ptShort, tenureShort, engShort, short, avg, categoryCounts, imminent }
   }, [employees])
+
+  const byRank = useMemo(() => {
+    if (!employees) return {}
+    const cat = CATEGORIES.find((c) => c.key === category)
+    const scoped = cat ? employees.filter(cat.test) : employees
+    const out = {}
+    scoped.forEach((e) => {
+      const r = e.rank
+      if (!out[r]) out[r] = { t: 0, p: 0, s: 0 }
+      out[r].t++
+      if (e.status === 'possible') out[r].p++
+      out[r].s += e.currentPts
+    })
+    return out
+  }, [employees, category])
 
   if (error) return <ErrorBox error={error} />
   if (!stats) return <Loading />
@@ -81,8 +98,22 @@ export default function Dashboard() {
       />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div style={crd}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>직급별 현황</div>
-          {Object.keys(stats.byRank).length === 0 ? (
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>직급별 현황</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+            {CATEGORIES.map((c) => (
+              <button
+                key={c.key} onClick={() => setCategory(c.key)}
+                style={{
+                  padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  color: category === c.key ? '#fff' : c.c,
+                  background: category === c.key ? c.c : '#f1f5f9',
+                }}
+              >
+                {c.label} <span style={{ opacity: 0.85 }}>{stats.categoryCounts[c.key]}</span>
+              </button>
+            ))}
+          </div>
+          {Object.keys(byRank).length === 0 ? (
             <EmptyState />
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -90,7 +121,7 @@ export default function Dashboard() {
                 <tr>{['직급', '인원', '승진가능', '평균'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
-                {Object.entries(stats.byRank).map(([r, d]) => (
+                {Object.entries(byRank).map(([r, d]) => (
                   <tr key={r}>
                     <td style={tdS}>{r}</td>
                     <td style={tdS}>{d.t}명</td>
