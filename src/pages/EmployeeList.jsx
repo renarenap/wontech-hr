@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, P, B, G, R } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
-import { Bd, GB, Prog, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
+import { Bd, GB, Prog, TenureBar, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
@@ -197,7 +197,7 @@ export default function EmployeeList() {
                   <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }}>{e.backfillPts || 0}P</td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
-                  <td style={tdS}><span style={{ color: e.tenureMet ? G : '#94a3b8' }}>{e.level}년/{e.req_tenure}년</span></td>
+                  <td style={tdS}><TenureBar level={e.level} reqTenure={e.req_tenure} /></td>
                   <td style={tdS}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {e.issues.map((i) => {

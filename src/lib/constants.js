@@ -85,8 +85,8 @@ export const DEPT_OPTIONS = [
 
 export const STATUS_LABEL = {
   possible: { label: '승진 가능', color: G, bg: '#dcfce7' },
-  ptShort: { label: '연차OK·P부족', color: Y, bg: '#fef9c3' },
-  tenureShort: { label: 'P OK·연차부족', color: Y, bg: '#fef9c3' },
+  ptShort: { label: '포인트 부족', color: Y, bg: '#fef9c3' },
+  tenureShort: { label: '연차 부족', color: Y, bg: '#fef9c3' },
   engShort: { label: '외국어 미충족', color: '#c026d3', bg: '#fae8ff' },
   short: { label: '미충족', color: R, bg: '#fee2e2' },
   na: { label: '해당없음', color: '#94a3b8', bg: '#f1f5f9' },

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, O, P, G, Y, R } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
-import { SB, Bd, Prog, crd, Loading, ErrorBox } from '../components/ui'
+import { SB, Bd, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -73,7 +73,7 @@ export default function EmployeeDetail() {
           <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[emp.track] || emp.track}</div></div>
           {emp.hasCriteria ? (
             <>
-              <div><div style={fl}>체류연한</div><div style={fv}>{emp.level}년/{emp.req_tenure}년 {emp.tenureMet ? '✅' : '❌'}</div></div>
+              <div><div style={fl}>체류연한</div><div style={fv}><TenureBar level={emp.level} reqTenure={emp.req_tenure} /></div></div>
               <div><div style={fl}>진급 기준</div><div style={fv}>{emp.threshold}P</div></div>
             </>
           ) : (

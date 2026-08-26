@@ -42,6 +42,25 @@ export function SB({ status }) {
   return <Bd color={c.color} bg={c.bg}>{c.label}</Bd>
 }
 
+// 연차를 체류연한 기준으로 칸칸이 채워지는 막대(에너지바)로 보여줌
+export function TenureBar({ level, reqTenure }) {
+  if (!reqTenure || reqTenure <= 0) return <span style={{ fontSize: 11, color: '#94a3b8' }}>해당없음</span>
+  const lvl = level || 0
+  const met = lvl >= reqTenure
+  const filled = Math.min(lvl, reqTenure)
+  const color = met ? G : Y
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {Array.from({ length: reqTenure }).map((_, i) => (
+          <div key={i} style={{ width: 12, height: 10, borderRadius: 2, background: i < filled ? color : '#e5e7eb' }} />
+        ))}
+      </div>
+      <span style={{ fontSize: 11, color, fontWeight: 700, whiteSpace: 'nowrap' }}>{lvl}/{reqTenure}년</span>
+    </div>
+  )
+}
+
 export function Prog({ current, max, showLabel = true }) {
   const pct = max > 0 ? (current / max) * 100 : 0
   const color = pct >= 100 ? G : pct >= 70 ? P : pct >= 40 ? Y : R
