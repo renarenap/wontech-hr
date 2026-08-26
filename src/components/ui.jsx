@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GRADE_LABEL, GRADE_COLOR, STATUS_LABEL, G, P, Y, R, B, O } from '../lib/constants'
+import { GRADE_COLOR, STATUS_LABEL, G, P, Y, R, B, O } from '../lib/constants'
 
 // ═══ 공통 스타일 ═══
 export const thS = {
@@ -26,11 +26,13 @@ export function Bd({ children, color, bg }) {
   )
 }
 
+// 저장된 등급을 그대로 보여줌 — '23~'25 반기 기록은 S/A+/A/B+/B/C/D, '26년~ 기록은 EX/VG/GD/NI/UN
+// (연도별로 다른 체계를 썼던 걸 하나로 바꿔 보여주면 오히려 헷갈려서 변환 안 함)
 export function GB({ grade }) {
   const g = grade || '0'
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 22, borderRadius: 5, fontSize: 10, fontWeight: 700, color: '#fff', background: GRADE_COLOR[g] || '#cbd5e1', marginRight: 2 }}>
-      {GRADE_LABEL[g] || g}
+      {g}
     </span>
   )
 }

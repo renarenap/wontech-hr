@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, GRADE_LABEL, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, O, P, G, Y, R } from '../lib/constants'
+import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, O, P, G, Y, R } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
 import { SB, Bd, Prog, crd, Loading, ErrorBox } from '../components/ui'
 
@@ -116,7 +116,7 @@ export default function EmployeeDetail() {
                 const height = (GRADE_HEIGHT[h.grade] || 0) * 10
                 return (
                   <div key={h.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: GRADE_COLOR[h.grade] || '#94a3b8' }}>{GRADE_LABEL[h.grade] || h.grade}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: GRADE_COLOR[h.grade] || '#94a3b8' }}>{h.grade}</span>
                     <div style={{ width: 32, height, borderRadius: 5, background: GRADE_COLOR[h.grade] || '#e2e8f0' }} />
                     <span style={{ fontSize: 9, color: '#94a3b8' }}>{h.period}</span>
                   </div>
