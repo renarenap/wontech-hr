@@ -82,6 +82,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   const engGated = isEngGateTrack(employee)
   const engOk = engGateMet(employee)
 
+  // status: 대시보드 KPI처럼 "한 사람당 버킷 하나"가 필요한 곳에서 쓰는 대표 상태(우선순위 기반)
   let status
   if (!hasCriteria) status = 'na'
   else if (ptsMet && tenureMet) status = (!engGated || engOk) ? 'possible' : 'engShort'
@@ -89,8 +90,20 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   else if (!ptsMet && tenureMet) status = 'ptShort'
   else status = 'short'
 
+  // issues: 실제로 걸려있는 미충족 사유를 전부 나열 — 연차·포인트·외국어가 동시에 부족할 수도 있어서
+  // (목록 화면 상태 컬럼은 이 배열을 뱃지 여러 개로 보여줌)
+  const issues = []
+  if (hasCriteria) {
+    if (!tenureMet) issues.push('tenureShort')
+    if (!ptsMet) issues.push('ptShort')
+    if (engGated && !engOk) issues.push('engShort')
+    if (issues.length === 0) issues.push('possible')
+  } else {
+    issues.push('na')
+  }
+
   return {
     ...employee, evalPts: evalPtsSum, backfillPts, addPts, currentPts, gap,
-    req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status,
+    req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }

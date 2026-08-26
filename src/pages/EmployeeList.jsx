@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACK_LABEL, P, B, G, R } from '../lib/constants'
+import { sortByPeriod, TRACK_LABEL, STATUS_LABEL, P, B, G, R } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
-import { Bd, GB, SB, Prog, thS, tdS, inp, Loading, ErrorBox, EmptyState } from '../components/ui'
+import { Bd, GB, Prog, thS, tdS, inp, Loading, ErrorBox, EmptyState } from '../components/ui'
 
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
 const CATEGORY_COLOR = { 사무: '#475569', 사무영어필수: B, 연구: P, 임원: '#92400e' }
@@ -142,10 +142,16 @@ export default function EmployeeList() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={thS}>이름</th><th style={thS}>소속</th><th style={thS}>직급</th><th style={thS}>직군</th><th style={thS}>평가 이력</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('name')}>이름{ar('name')}</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('dept')}>소속{ar('dept')}</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('rank')}>직급{ar('rank')}</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('track')}>직군{ar('track')}</th>
+                <th style={thS}>평가 이력</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>백필P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('currentPts')}>포인트{ar('currentPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('gap')}>잔여{ar('gap')}</th>
-                <th style={thS}>연차</th><th style={thS}>상태</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
+                <th style={thS}>상태</th>
               </tr>
             </thead>
             <tbody>
@@ -160,10 +166,18 @@ export default function EmployeeList() {
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
                   <td style={tdS}><div style={{ display: 'flex' }}>{e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}</div></td>
+                  <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }}>{e.backfillPts || 0}P</td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
                   <td style={tdS}><span style={{ color: e.tenureMet ? G : '#94a3b8' }}>{e.level}년/{e.req_tenure}년</span></td>
-                  <td style={tdS}><SB status={e.status} /></td>
+                  <td style={tdS}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {e.issues.map((i) => {
+                        const cfg = STATUS_LABEL[i] || STATUS_LABEL.short
+                        return <Bd key={i} color={cfg.color} bg={cfg.bg}>{cfg.label}</Bd>
+                      })}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
