@@ -146,7 +146,7 @@ export default function Dashboard() {
                     onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
                     onMouseLeave={(ev) => (ev.currentTarget.style.background = 'transparent')}
                   >
-                    <td style={{ ...tdS, color: O, fontWeight: 600 }}>{e.name}</td>
+                    <td style={{ ...tdS, color: '#111827', fontWeight: 700 }}>{e.name}</td>
                     <td style={tdS}>{e.rank}</td>
                     <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   </tr>
