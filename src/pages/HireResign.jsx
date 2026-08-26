@@ -13,11 +13,11 @@ function SectionTitle({ icon, children }) {
 
 // ═══ 공용 로직: 승진포인트 employees 데이터에 입사자 추가 (+ 온보딩/입사체크리스트) ═══
 // req_tenure/threshold는 더 이상 employees 행에 저장하지 않고 rank_criteria 파라미터 테이블에서 읽어옴(하드코딩 금지)
-async function addHireToRoster({ name, dept, rank, track, join_date, backfillFullTenure = false }) {
+async function addHireToRoster({ name, dept, rank, track, join_date, level = 0, backfillFullTenure = false }) {
   const { data: emp, error: e1 } = await supabase
     .from('employees')
     .insert({
-      name, dept, rank, track, role: '팀원', level: 0, req_tenure: 0, threshold: 0, base_pts: 0,
+      name, dept, rank, track, role: '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
       backfill_full_tenure: backfillFullTenure,
     })
     .select()
@@ -158,6 +158,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [rank, setRank] = useState('')
   const [track, setTrack] = useState('')
   const [trackTouched, setTrackTouched] = useState(false)
+  const [level, setLevel] = useState(0)
   const [backfillFullTenure, setBackfillFullTenure] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -190,7 +191,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
     setSaving(true)
     try {
-      await addHireToRoster({ name, dept: deptVal, rank, track, join_date: joinDate, backfillFullTenure })
+      await addHireToRoster({ name, dept: deptVal, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -245,10 +246,18 @@ function QuickAddHireModal({ onClose, onCreated }) {
           </div>
         )}
 
+        <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
+        <input style={field} type="number" min="0" value={level} onChange={(e) => setLevel(e.target.value)} />
+
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
-          경력직 백필 적용 (평가이력 없는 인정 연차 전체에 직급 기준점수 적용)
+          경력직 백필 적용 (위 인정 연차 전체 × 직급 기준점수를 한 번에 기본포인트로 적용)
         </label>
+        {backfillFullTenure && Number(level) === 0 && (
+          <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
+            인정 연차가 0이면 백필 포인트도 0이 돼요 — 위에 연차를 입력해주세요.
+          </div>
+        )}
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
