@@ -15,6 +15,9 @@ export default function EmployeeList() {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [trackF, setTrackF] = useState('all') // 'all' | CATEGORIES[].key
+  const [rankF, setRankF] = useState('all')
+  const [deptF, setDeptF] = useState('all')
+  const [teamF, setTeamF] = useState('all')
   const [statusF, setStatusF] = useState('all')
   const [sortKey, setSortKey] = useState('currentPts')
   const [sortAsc, setSortAsc] = useState(false)
@@ -45,21 +48,37 @@ export default function EmployeeList() {
     return () => { cancelled = true }
   }, [])
 
+  // 직급/부서/팀 드롭다운 옵션은 현재 선택된 직군 탭 안에서만 뽑아서, 엉뚱한 조합을 고를 수 없게 함
+  const scopedByTrack = useMemo(() => {
+    if (!employees) return []
+    if (trackF === 'all') return employees
+    const cat = CATEGORIES.find((c) => c.key === trackF)
+    return cat ? employees.filter(cat.test) : employees
+  }, [employees, trackF])
+
+  const rankOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.rank))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
+  const deptOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
+  const teamOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.team).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
+
   const filtered = useMemo(() => {
     if (!employees) return []
-    let l = employees.filter((e) => {
+    let l = scopedByTrack.filter((e) => {
       if (search && !e.name.includes(search) && !e.dept.includes(search) && !(e.team || '').includes(search)) return false
-      if (trackF !== 'all') {
-        const cat = CATEGORIES.find((c) => c.key === trackF)
-        if (cat && !cat.test(e)) return false
-      }
+      if (rankF !== 'all' && e.rank !== rankF) return false
+      if (deptF !== 'all' && e.dept !== deptF) return false
+      if (teamF !== 'all' && e.team !== teamF) return false
       if (statusF === 'possible' && e.status !== 'possible') return false
       if (statusF === 'short' && e.status === 'possible') return false
       return true
     })
     l.sort((a, b) => (sortAsc ? (a[sortKey] > b[sortKey] ? 1 : -1) : a[sortKey] < b[sortKey] ? 1 : -1))
     return l
-  }, [employees, search, trackF, statusF, sortKey, sortAsc])
+  }, [employees, scopedByTrack, search, rankF, deptF, teamF, statusF, sortKey, sortAsc])
+
+  // 직군 탭을 바꾸면 그 탭에 없는 값으로 걸려있던 직급/부서/팀 필터는 초기화
+  useEffect(() => {
+    setRankF('all'); setDeptF('all'); setTeamF('all')
+  }, [trackF])
 
   const hs = (k) => {
     if (sortKey === k) setSortAsc(!sortAsc)
@@ -97,6 +116,18 @@ export default function EmployeeList() {
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 부서 · 팀" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select style={{ ...inp, cursor: 'pointer' }} value={rankF} onChange={(e) => setRankF(e.target.value)}>
+          <option value="all">전체 직급</option>
+          {rankOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <select style={{ ...inp, cursor: 'pointer' }} value={deptF} onChange={(e) => setDeptF(e.target.value)}>
+          <option value="all">전체 부서</option>
+          {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select style={{ ...inp, cursor: 'pointer' }} value={teamF} onChange={(e) => setTeamF(e.target.value)}>
+          <option value="all">전체 팀</option>
+          {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
           <option value="all">전체 상태</option>
           <option value="possible">승진 가능</option>
