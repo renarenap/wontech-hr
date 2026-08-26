@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O, P, G, Y, R, B } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
+import { O, P, G, Y, R, B, TRACK_LABEL } from '../lib/constants'
+import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
 
-// 임원은 track 값과 무관하게 "승진 기준이 없는 사람"으로 판단 (hasCriteria === false)
-const CATEGORIES = [
-  { key: '사무', label: '사무직', c: '#475569', test: (e) => e.hasCriteria && e.track === '사무' },
-  { key: '사무영어필수', label: '사무직(영어필수)', c: B, test: (e) => e.hasCriteria && e.track === '사무영어필수' },
-  { key: '연구', label: '연구직', c: P, test: (e) => e.hasCriteria && e.track === '연구' },
-  { key: '임원', label: '임원', c: '#92400e', test: (e) => !e.hasCriteria },
-]
+const CATEGORY_COLOR = { 사무: '#475569', 사무영어필수: B, 연구: P, 임원: '#92400e' }
+const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -45,25 +40,23 @@ export default function Dashboard() {
 
   const stats = useMemo(() => {
     if (!employees) return null
-    // "전체 대상"은 승진포인트 추적 대상(rank_criteria가 정의된 직급)만 — 임원/부장/수석연구원(해당없음)은 제외.
-    // 회사 전체 인원수는 어느 화면에서든 상단 헤더에 따로 표시됨.
+    const total = employees.length // 전체 인원 (임원 포함)
     const tracked = employees.filter((e) => e.hasCriteria)
-    const total = tracked.length
+    const na = employees.length - tracked.length
     const possible = tracked.filter((e) => e.status === 'possible').length
     const ptShort = tracked.filter((e) => e.status === 'ptShort').length
     const tenureShort = tracked.filter((e) => e.status === 'tenureShort').length
     const engShort = tracked.filter((e) => e.status === 'engShort').length
     const short = tracked.filter((e) => e.status === 'short').length
-    const avg = total ? (tracked.reduce((a, e) => a + e.currentPts, 0) / total).toFixed(1) : '0.0'
+    const avg = tracked.length ? (tracked.reduce((a, e) => a + e.currentPts, 0) / tracked.length).toFixed(1) : '0.0'
 
     const categoryCounts = Object.fromEntries(CATEGORIES.map((c) => [c.key, employees.filter(c.test).length]))
 
     const imminent = tracked
       .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible')
       .sort((a, b) => b.currentPts / b.threshold - a.currentPts / a.threshold)
-      .slice(0, 8)
 
-    return { total, possible, ptShort, tenureShort, engShort, short, avg, categoryCounts, imminent }
+    return { total, na, possible, ptShort, tenureShort, engShort, short, avg, categoryCounts, imminent }
   }, [employees])
 
   const byRank = useMemo(() => {
@@ -88,11 +81,12 @@ export default function Dashboard() {
     <div>
       <KpiRow
         items={[
-          { v: stats.total, l: '전체 대상', c: P },
+          { v: stats.total, l: '전체 인원', c: P },
           { v: stats.possible, l: '승진 가능', c: G },
           { v: stats.ptShort + stats.tenureShort, l: '연차/P 부족', c: Y },
-          { v: stats.engShort, l: '영어 미충족', c: '#c026d3' },
+          { v: stats.engShort, l: '외국어 미충족', c: '#c026d3' },
           { v: stats.short, l: '미충족', c: R },
+          { v: stats.na, l: '해당없음(임원 등)', c: '#94a3b8' },
           { v: stats.avg, l: '평균 포인트', c: O },
         ]}
       />
@@ -105,11 +99,11 @@ export default function Dashboard() {
                 key={c.key} onClick={() => setCategory(c.key)}
                 style={{
                   padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  color: category === c.key ? '#fff' : c.c,
-                  background: category === c.key ? c.c : '#f1f5f9',
+                  color: category === c.key ? '#fff' : CATEGORY_COLOR[c.key],
+                  background: category === c.key ? CATEGORY_COLOR[c.key] : '#f1f5f9',
                 }}
               >
-                {c.label} <span style={{ opacity: 0.85 }}>{stats.categoryCounts[c.key]}</span>
+                {CATEGORY_LABEL[c.key]} <span style={{ opacity: 0.85 }}>{stats.categoryCounts[c.key]}</span>
               </button>
             ))}
           </div>
@@ -135,11 +129,12 @@ export default function Dashboard() {
         </div>
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>
-            승진 임박자 <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>(90%+)</span>
+            승진 임박자 <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>(90%+) {stats.imminent.length}명</span>
           </div>
           {stats.imminent.length === 0 ? (
             <EmptyState />
           ) : (
+            <div style={{ maxHeight: 420, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>{['이름', '직급', '달성률'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
@@ -158,6 +153,7 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACKS, TRACK_LABEL, P, B, G, R } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
+import { sortByPeriod, TRACK_LABEL, P, B, G, R } from '../lib/constants'
+import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
 import { Bd, GB, SB, Prog, thS, tdS, inp, Loading, ErrorBox, EmptyState } from '../components/ui'
 
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
+const CATEGORY_COLOR = { 사무: '#475569', 사무영어필수: B, 연구: P, 임원: '#92400e' }
+const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 
 export default function EmployeeList() {
   const navigate = useNavigate()
   const [employees, setEmployees] = useState(null)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [trackF, setTrackF] = useState('all')
+  const [trackF, setTrackF] = useState('all') // 'all' | CATEGORIES[].key
   const [statusF, setStatusF] = useState('all')
   const [sortKey, setSortKey] = useState('currentPts')
   const [sortAsc, setSortAsc] = useState(false)
@@ -47,7 +49,10 @@ export default function EmployeeList() {
     if (!employees) return []
     let l = employees.filter((e) => {
       if (search && !e.name.includes(search) && !e.dept.includes(search) && !(e.team || '').includes(search)) return false
-      if (trackF !== 'all' && e.track !== trackF) return false
+      if (trackF !== 'all') {
+        const cat = CATEGORIES.find((c) => c.key === trackF)
+        if (cat && !cat.test(e)) return false
+      }
       if (statusF === 'possible' && e.status !== 'possible') return false
       if (statusF === 'short' && e.status === 'possible') return false
       return true
@@ -67,12 +72,31 @@ export default function EmployeeList() {
 
   return (
     <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setTrackF('all')}
+          style={{
+            padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            color: trackF === 'all' ? '#fff' : '#475569', background: trackF === 'all' ? '#475569' : '#f1f5f9',
+          }}
+        >
+          전체
+        </button>
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.key} onClick={() => setTrackF(c.key)}
+            style={{
+              padding: '6px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              color: trackF === c.key ? '#fff' : CATEGORY_COLOR[c.key],
+              background: trackF === c.key ? CATEGORY_COLOR[c.key] : '#f1f5f9',
+            }}
+          >
+            {CATEGORY_LABEL[c.key]}
+          </button>
+        ))}
+      </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 부서 · 팀" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select style={{ ...inp, cursor: 'pointer' }} value={trackF} onChange={(e) => setTrackF(e.target.value)}>
-          <option value="all">전체 직군</option>
-          {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
           <option value="all">전체 상태</option>
           <option value="possible">승진 가능</option>

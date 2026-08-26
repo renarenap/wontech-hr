@@ -33,16 +33,28 @@ export function computeBackfill(level, R, rankCriteria, backfillFullTenure) {
   return Math.max(0, Math.round((((lvl - 1) * 2 - R) * rate / 2) * 10) / 10)
 }
 
-// 영어필수 승진 게이트 대상 직급 (과장/차장만 — 부장은 기준 자체가 없어 'na' 상태로 별도 처리됨)
-const ENG_GATE_RANKS = ['과장', '차장']
+// 외국어필수 승진 게이트 대상 직급 (과장/차장만 — 부장은 기준 자체가 없어 'na' 상태로 별도 처리됨)
+const LANG_GATE_RANKS = ['과장', '차장']
 
 export function isEngGateTrack(employee) {
-  return employee.track === '사무영어필수' && ENG_GATE_RANKS.includes(employee.rank)
+  return employee.track === '사무영어필수' && LANG_GATE_RANKS.includes(employee.rank)
 }
 
+// 영어 또는 제2외국어 중 하나라도 Im3(2점) 이상이거나 평생인정이면 충족 — "영어"가 아니라 "외국어" 요건이라 둘 다 인정
 export function engGateMet(employee) {
-  return (employee.eng_pts || 0) >= 2 || !!employee.eng_lifetime
+  const engOk = (employee.eng_pts || 0) >= 2 || !!employee.eng_lifetime
+  const eng2Ok = (employee.eng2_pts || 0) >= 2 || !!employee.eng2_lifetime
+  return engOk || eng2Ok
 }
+
+// 대시보드/포인트현황 등에서 공통으로 쓰는 직군 구분 — 임원은 저장된 track 값과 무관하게
+// rank_criteria가 없는(hasCriteria === false) 사람으로 판단
+export const CATEGORIES = [
+  { key: '사무', track: '사무', test: (e) => e.hasCriteria && e.track === '사무' },
+  { key: '사무영어필수', track: '사무영어필수', test: (e) => e.hasCriteria && e.track === '사무영어필수' },
+  { key: '연구', track: '연구', test: (e) => e.hasCriteria && e.track === '연구' },
+  { key: '임원', track: null, test: (e) => !e.hasCriteria },
+]
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
 export function deriveEmployee(employee, evaluations, rankCriteriaMap) {

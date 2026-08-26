@@ -241,7 +241,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
         </select>
         {!isResearch && (
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
-            부서 기준으로 자동 제안됩니다 (마케팅·미래전략·해외CS·해외영업 계열 → 영어필수). 필요하면 직접 바꿔주세요.
+            부서 기준으로 자동 제안됩니다 (마케팅·미래전략·해외CS·해외영업 계열 → 외국어필수). 필요하면 직접 바꿔주세요.
           </div>
         )}
 
