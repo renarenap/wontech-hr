@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { deriveEmployee, sortByPeriod, P, G, R } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, P, B, G, R } from '../lib/constants'
+import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
 import { Bd, GB, SB, Prog, thS, tdS, inp, Loading, ErrorBox, EmptyState } from '../components/ui'
+
+const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
 
 export default function EmployeeList() {
   const navigate = useNavigate()
@@ -18,9 +21,10 @@ export default function EmployeeList() {
     let cancelled = false
     async function load() {
       setError(null)
-      const [{ data: emps, error: e1 }, { data: evals, error: e2 }] = await Promise.all([
+      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('evaluations').select('employee_id, period, grade, points').order('period'),
+        fetchRankCriteria(),
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
@@ -31,12 +35,11 @@ export default function EmployeeList() {
       })
       const list = (emps || []).map((e) => {
         const history = sortByPeriod(byEmp[e.id] || [])
-        const sum = history.reduce((a, h) => a + Number(h.points || 0), 0)
-        return { ...deriveEmployee(e, sum), history }
+        return { ...deriveEmployee(e, history, rankCriteria), history }
       })
       setEmployees(list)
     }
-    load()
+    load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
   }, [])
 
@@ -68,8 +71,7 @@ export default function EmployeeList() {
         <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 부서 · 팀" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select style={{ ...inp, cursor: 'pointer' }} value={trackF} onChange={(e) => setTrackF(e.target.value)}>
           <option value="all">전체 직군</option>
-          <option value="사무">사무직</option>
-          <option value="연구">연구직</option>
+          {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
           <option value="all">전체 상태</option>
@@ -101,7 +103,7 @@ export default function EmployeeList() {
                   <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
                   <td style={{ ...tdS, color: '#64748b' }}>{e.dept}{e.team ? ` · ${e.team}` : ''}</td>
                   <td style={tdS}>{e.rank}</td>
-                  <td style={tdS}><Bd color={e.track === '연구' ? P : '#475569'} bg={e.track === '연구' ? '#f3e8ff' : '#f1f5f9'}>{e.track}</Bd></td>
+                  <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
                   <td style={tdS}><div style={{ display: 'flex' }}>{e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}</div></td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, RANK_DEFAULTS, DEPT_OPTIONS } from '../lib/constants'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, suggestTrackForDept } from '../lib/constants'
 import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
@@ -12,14 +12,14 @@ function SectionTitle({ icon, children }) {
 }
 
 // ═══ 공용 로직: 승진포인트 employees 데이터에 입사자 추가 (+ 온보딩/입사체크리스트) ═══
-async function addHireToRoster({ name, dept, rank, join_date }) {
-  const track = RESEARCH_RANKS.includes(rank) ? '연구' : '사무' // 임원 등 트랙 구분 없는 직급은 사무로 저장(추적용 필드 아님)
-  const defaults = RANK_DEFAULTS[rank]
-  if (!defaults) throw new Error(`승진포인트 대상 직급이 아니에요: ${rank}`)
-
+// req_tenure/threshold는 더 이상 employees 행에 저장하지 않고 rank_criteria 파라미터 테이블에서 읽어옴(하드코딩 금지)
+async function addHireToRoster({ name, dept, rank, track, join_date, backfillFullTenure = false }) {
   const { data: emp, error: e1 } = await supabase
     .from('employees')
-    .insert({ name, dept, rank, track, role: '팀원', level: 0, req_tenure: defaults.req_tenure, threshold: defaults.threshold, base_pts: 0 })
+    .insert({
+      name, dept, rank, track, role: '팀원', level: 0, req_tenure: 0, threshold: 0, base_pts: 0,
+      backfill_full_tenure: backfillFullTenure,
+    })
     .select()
     .single()
   if (e1) throw new Error(e1.message)
@@ -54,6 +54,7 @@ async function resignEmployee(picked, lastDay) {
     original_id: picked.id, name: picked.name, dept: picked.dept, team: picked.team, rank: picked.rank,
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, eng2_pts: picked.eng2_pts, cert_pts: picked.cert_pts, award_pts: picked.award_pts,
+    eng_lifetime: picked.eng_lifetime, eng2_lifetime: picked.eng2_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
     evaluations_snapshot: evals || [], transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
   })
   if (e2) throw new Error(e2.message)
@@ -75,8 +76,9 @@ async function resignEmployee(picked, lastDay) {
 async function restoreEmployee(archived) {
   const payload = {
     name: archived.name, dept: archived.dept, team: archived.team, rank: archived.rank,
-    track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure, threshold: archived.threshold,
+    track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure || 0, threshold: archived.threshold || 0,
     base_pts: archived.base_pts, eng_pts: archived.eng_pts, eng2_pts: archived.eng2_pts, cert_pts: archived.cert_pts, award_pts: archived.award_pts,
+    eng_lifetime: archived.eng_lifetime, eng2_lifetime: archived.eng2_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
   }
   if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
 
@@ -154,6 +156,9 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [customDept, setCustomDept] = useState('')
   const [joinDate, setJoinDate] = useState('')
   const [rank, setRank] = useState('')
+  const [track, setTrack] = useState('')
+  const [trackTouched, setTrackTouched] = useState(false)
+  const [backfillFullTenure, setBackfillFullTenure] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -166,16 +171,26 @@ function QuickAddHireModal({ onClose, onCreated }) {
     })
   }, [])
 
+  const deptVal = dept === '__custom__' ? customDept.trim() : dept
+  const isResearch = RESEARCH_RANKS.includes(rank)
+
+  // 부서/직위가 바뀌면 직군을 자동 제안 — 사용자가 직접 고른 뒤엔(trackTouched) 더 이상 덮어쓰지 않음
+  useEffect(() => {
+    if (trackTouched) return
+    if (isResearch) { setTrack('연구'); return }
+    if (deptVal) setTrack(suggestTrackForDept(deptVal, false))
+  }, [deptVal, isResearch, trackTouched])
+
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    const deptVal = dept === '__custom__' ? customDept.trim() : dept
     if (!deptVal) { setError('부서를 선택하거나 입력해주세요.'); return }
     if (!rank) { setError('직위를 선택해주세요.'); return }
+    if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
     try {
-      await addHireToRoster({ name, dept: deptVal, rank, join_date: joinDate })
+      await addHireToRoster({ name, dept: deptVal, rank, track, join_date: joinDate, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -215,6 +230,25 @@ function QuickAddHireModal({ onClose, onCreated }) {
             {EXEC_RANKS.map((r) => <option key={r} value={r}>{r}</option>)}
           </optgroup>
         </select>
+
+        <label style={lbl}>직군</label>
+        <select
+          style={field} required value={track} disabled={isResearch}
+          onChange={(e) => { setTrack(e.target.value); setTrackTouched(true) }}
+        >
+          <option value="" disabled>선택하세요</option>
+          {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
+        {!isResearch && (
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+            부서 기준으로 자동 제안됩니다 (마케팅·미래전략·해외CS·해외영업 계열 → 영어필수). 필요하면 직접 바꿔주세요.
+          </div>
+        )}
+
+        <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+          <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
+          경력직 백필 적용 (평가이력 없는 인정 연차 전체에 직급 기준점수 적용)
+        </label>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
@@ -305,7 +339,7 @@ function QuickAddResignModal({ onClose, onCreated }) {
 
         {picked && (
           <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12, margin: '10px 0', fontSize: 12, lineHeight: 1.8 }}>
-            <div><b>{picked.name}</b> · {picked.track}직 · {picked.rank}</div>
+            <div><b>{picked.name}</b> · {TRACK_LABEL[picked.track] || picked.track} · {picked.rank}</div>
             <div style={{ color: '#64748b' }}>
               {picked.dept}{picked.team ? ` · ${picked.team}` : ''}
               {picked.join_date ? ` · 입사일 ${picked.join_date}` : ' · 입사일 정보 없음'}
@@ -373,7 +407,8 @@ function ImportChangesModal({ onClose, onApplied }) {
     for (const r of selected) {
       try {
         if (r.kind === 'hire') {
-          await addHireToRoster({ name: r.name, dept: r.dept, rank: r.rank, join_date: r.date })
+          const track = suggestTrackForDept(r.dept, RESEARCH_RANKS.includes(r.rank))
+          await addHireToRoster({ name: r.name, dept: r.dept, rank: r.rank, track, join_date: r.date })
         } else {
           await resignEmployee(r.matchedEmployee, r.date)
         }

@@ -141,7 +141,7 @@ function AddOnboardingModal({ onClose, onCreated }) {
       .from('employees')
       .insert({
         name: form.name, dept: form.dept, team: form.team || null, rank: form.rank,
-        track: form.track, role: '팀원', level: 0, req_tenure: 4, threshold: 24, base_pts: 0,
+        track: form.track, role: '팀원', level: 0, req_tenure: 0, threshold: 0, base_pts: 0,
       })
       .select()
       .single()

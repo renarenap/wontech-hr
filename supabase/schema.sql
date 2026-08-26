@@ -12,17 +12,30 @@ create table if not exists employees (
   dept text not null,
   team text,
   rank text not null,
-  track text not null check (track in ('사무','연구')),
+  track text not null check (track in ('사무','사무영어필수','연구')),
   role text,
   level int default 0,          -- 연차
-  req_tenure int not null,       -- 필요 체류연한
-  threshold int not null,        -- 승진 포인트 기준
-  base_pts numeric default 0,
+  -- req_tenure/threshold는 더 이상 계산에 쓰이지 않음(0 저장) — rank_criteria 테이블이 단일 소스
+  req_tenure int not null default 0,
+  threshold int not null default 0,
+  base_pts numeric default 0,   -- 레거시 필드, 더 이상 계산에 사용 안 함(경력직 백필로 대체)
+  backfill_full_tenure boolean default false,  -- true면 연차 전체 × 기준점수로 백필(경력직), false면 평가공백만 백필
   eng_pts numeric default 0,
+  eng_lifetime boolean default false,   -- 영어 AL/IH 평생인정 여부 (유효기간 만료돼도 승진요건 충족)
   eng2_pts numeric default 0,
+  eng2_lifetime boolean default false,
   cert_pts numeric default 0,
   award_pts numeric default 0,
   created_at timestamptz default now()
+);
+
+-- 직급별 승진 기준 파라미터 (하드코딩 대신 이 테이블로 관리 — '기준값 설정' 화면에서 편집)
+create table if not exists rank_criteria (
+  rank text primary key,
+  req_tenure int not null default 0,
+  threshold int not null default 0,
+  backfill_rate numeric not null default 0,  -- 경력직 백필 기준점수(연차당)
+  updated_at timestamptz default now()
 );
 
 -- 평가 이력 (반기/연간 등급)
@@ -98,7 +111,8 @@ create table if not exists employees_archive (
   name text not null,
   dept text, team text, rank text, track text, role text,
   level int, req_tenure int, threshold int,
-  base_pts numeric, eng_pts numeric, eng2_pts numeric, cert_pts numeric, award_pts numeric,
+  base_pts numeric, backfill_full_tenure boolean, eng_pts numeric, eng_lifetime boolean,
+  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, award_pts numeric,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   transfer_ids uuid[],              -- 삭제 시점에 이 직원 소유였던 transfers.id 목록 (복구 시 재연결용)
   resign_date date not null,
@@ -149,6 +163,7 @@ create table if not exists recruit_candidates (
 
 alter table employees enable row level security;
 alter table employees_archive enable row level security;
+alter table rank_criteria enable row level security;
 alter table evaluations enable row level security;
 alter table onboarding enable row level security;
 alter table onboarding_tasks enable row level security;
@@ -163,7 +178,7 @@ declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','employees_archive','evaluations','onboarding','onboarding_tasks',
+    'employees','employees_archive','rank_criteria','evaluations','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop

@@ -1,5 +1,7 @@
-import { GB, Tip, crd, thS, tdS } from '../components/ui'
+import { useEffect, useState } from 'react'
+import { GB, Tip, crd, thS, tdS, Loading, ErrorBox } from '../components/ui'
 import { O, B, P } from '../lib/constants'
+import { fetchRankCriteria } from '../lib/promotion'
 
 // 참고: 등급 환산표는 회사 규정에 맞춰 수정하세요. 아래는 원안 구조를 유지한 예시 값입니다.
 const NEW_GRADES = [
@@ -13,7 +15,9 @@ const ENG_GRADES = [
   { n: '4등급 (Im2)', p: 1 }, { n: '5등급 (Im1)', p: 0.5 },
 ]
 
-function RankTable({ title, subtitle, color, data, note }) {
+// 체류연한/진급포인트는 "기준값 설정"(rank_criteria)에서 실시간으로 가져옵니다.
+// Fast Track 체류연한·기본P는 계산에는 안 쓰이는 참고용 수치라 여기서만 관리합니다.
+function RankTable({ title, subtitle, color, rows, criteriaMap, note }) {
   return (
     <div style={crd}>
       <div style={{ fontSize: 15, fontWeight: 700, color }}>{title}</div>
@@ -23,15 +27,25 @@ function RankTable({ title, subtitle, color, data, note }) {
           <tr>{['직급', '체류연한', 'Fast Track', '기본P', '진급P'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
         </thead>
         <tbody>
-          {data.map((r) => (
-            <tr key={r[0]}>
-              <td style={{ ...tdS, fontWeight: 600 }}>{r[0]}</td>
-              <td style={tdS}>{r[1]}년</td>
-              <td style={tdS}>{r[2]}년</td>
-              <td style={tdS}>{r[3]}P</td>
-              <td style={{ ...tdS, color: O, fontWeight: 700 }}>{r[4]}P</td>
-            </tr>
-          ))}
+          {rows.map(([rank, fast, basePts]) => {
+            const rc = criteriaMap[rank]
+            const hasCriteria = !!rc && (rc.req_tenure > 0 || rc.threshold > 0)
+            return (
+              <tr key={rank}>
+                <td style={{ ...tdS, fontWeight: 600 }}>{rank}</td>
+                {hasCriteria ? (
+                  <>
+                    <td style={tdS}>{rc.req_tenure}년</td>
+                    <td style={tdS}>{fast}년</td>
+                    <td style={tdS}>{basePts}P</td>
+                    <td style={{ ...tdS, color: O, fontWeight: 700 }}>{rc.threshold}P</td>
+                  </>
+                ) : (
+                  <td style={{ ...tdS, color: '#94a3b8' }} colSpan={4}>해당없음 — 별도 승진 기준을 두지 않는 직급</td>
+                )}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
       {note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>{note}</div>}
@@ -83,6 +97,16 @@ const JPN_TIP = (
 )
 
 export default function Criteria() {
+  const [criteriaMap, setCriteriaMap] = useState(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    fetchRankCriteria().then(setCriteriaMap).catch(setError)
+  }, [])
+
+  if (error) return <ErrorBox error={error} />
+  if (!criteriaMap) return <Loading />
+
   return (
     <div>
       <div style={crd}>
@@ -120,42 +144,38 @@ export default function Criteria() {
                 ))}
               </tbody>
             </table>
-            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>* AL·IH 등급은 한 번 취득 시 평생 인정</div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+              * AL·IH 등급은 한 번 취득 시 평생 인정. 승진포인트 합산에는 들어가지 않고, 사무직(영어필수) 과장·차장 승진의 별도 필수요건으로만 사용됩니다.
+            </div>
           </div>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <RankTable title="② 사무직 (일반)" color={P} data={[
-          ['사원', 4, 3, 24, 24], ['대리', 4, 3, 24, 24], ['과장', 5, 4, 30, 35],
-          ['차장', 5, 4, 30, 36], ['부장', 5, 4, 30, 40],
-        ]} />
+        <RankTable
+          title="② 사무직 (일반)" color={P} criteriaMap={criteriaMap}
+          rows={[['사원', 3, 24], ['대리', 3, 24], ['과장', 4, 30], ['차장', 4, 30], ['부장', 4, 30]]}
+        />
         <RankTable
           title="③ 사무직 (영어필수)"
           subtitle="마케팅 · 미래전략 · 해외CS · 해외영업"
-          color={'#0284c7'}
-          data={[
-            ['사원', 4, 3, 24, 24], ['대리', 4, 3, 24, 24], ['과장', 5, 4, 33, 35],
-            ['차장', 5, 4, 33, 36], ['부장', 5, 4, 33, 40],
-          ]}
-          note="* 과장 이상 승진 시 영어 필수등급(3등급 · Im3) 이상 취득 필수"
+          color={'#0284c7'} criteriaMap={criteriaMap}
+          rows={[['사원', 3, 24], ['대리', 3, 24], ['과장', 4, 33], ['차장', 4, 33], ['부장', 4, 33]]}
+          note="* 과장·차장 승진 시 포인트·체류연한을 채워도 영어 필수등급(3등급 · Im3) 이상이 아니면 '영어 미충족'으로 표시됩니다."
         />
       </div>
 
-      <RankTable title="④ 연구직" color={B} data={[
-        ['연구원', 4, 3, 24, 24], ['전임연구원', 4, 3, 24, 24], ['선임연구원', 6, 5, 36, 40],
-        ['책임연구원', 7, 6, 42, 48], ['수석연구원', 4, 3, 24, 32],
-      ]} />
+      <RankTable
+        title="④ 연구직" color={B} criteriaMap={criteriaMap}
+        rows={[['연구원', 3, 24], ['전임연구원', 3, 24], ['선임연구원', 5, 36], ['책임연구원', 6, 42], ['수석연구원', 3, 24]]}
+      />
 
       <div style={crd}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#14b8a6' }}>⑤ 가점 (어학 · 자격증 · 기술성과)</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#14b8a6' }}>⑤ 가점 (자격증 · 기술성과 · 포상)</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
             {[
-              ['어학', '영어 (OPIc 1~5등급)', '0.5~4P', '4P', ENG_TIP],
-              ['어학', '중국어 (HSK Speaking·BCT)', '2~4P', '4P', CHN_TIP],
-              ['어학', '일본어 (SJPT·JPT)', '0.5~4P', '4P', JPN_TIP],
               ['전문 자격', '기술사·기능장·기사', '3P', '6P', CERT_NOTE],
               ['기술 성과', '해외 특허/국제논문', '3P', '6P', null],
               ['기술 성과', '국내 특허 등록', '2P', '6P', PATENT_NOTE],
@@ -173,7 +193,31 @@ export default function Criteria() {
         </table>
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 12, lineHeight: 1.6 }}>
           * 동일분야 상위자격 취득 시 상위 1개만 인정 · 직무 유관성은 조직장 및 인사파트 승인 필요<br />
-          * 유효기간 있는 자격·어학은 포인트 인정을 위해 승진 후 재입증 필요
+          * 유효기간 있는 자격은 포인트 인정을 위해 승진 후 재입증 필요
+        </div>
+      </div>
+
+      <div style={crd}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑥ 어학 (별도 필수요건 — 가점 풀에 포함되지 않음)</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>
+            {[
+              ['어학', '영어 (OPIc 1~5등급)', '0.5~4P', '4P', ENG_TIP],
+              ['어학', '중국어 (HSK Speaking·BCT)', '2~4P', '4P', CHN_TIP],
+              ['어학', '일본어 (SJPT·JPT)', '0.5~4P', '4P', JPN_TIP],
+            ].map(([a, b, c, d, note], i) => (
+              <tr key={i}>
+                <td style={{ ...tdS, fontWeight: 600 }}>{a}</td>
+                <td style={tdS}><Tip content={note}>{b}</Tip></td>
+                <td style={{ ...tdS, color: '#0284c7', fontWeight: 600 }}>{c}</td><td style={tdS}>{d}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 12, lineHeight: 1.6 }}>
+          * 영어 점수는 승진포인트 합계에 더해지지 않고, 사무직(영어필수) 과장·차장 승진 시 필수요건(Im3 이상) 충족 여부만 판단하는 데 쓰입니다.<br />
+          * 제2외국어 고급/AL 등급은 영어 1등급과 동일하게 평생 인정됩니다.
         </div>
       </div>
     </div>

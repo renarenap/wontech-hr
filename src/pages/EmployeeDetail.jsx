@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { deriveEmployee, sortByPeriod, GRADE_LABEL, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, O, P, G, Y, R } from '../lib/constants'
-import { SB, Prog, crd, Loading, ErrorBox } from '../components/ui'
+import { sortByPeriod, GRADE_LABEL, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, O, P, G, Y, R } from '../lib/constants'
+import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
+import { SB, Bd, Prog, crd, Loading, ErrorBox } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -17,18 +18,18 @@ export default function EmployeeDetail() {
     async function load() {
       setError(null)
       setEmp(null)
-      const [{ data: e, error: e1 }, { data: evals, error: e2 }] = await Promise.all([
+      const [{ data: e, error: e1 }, { data: evals, error: e2 }, rankCriteria] = await Promise.all([
         supabase.from('employees').select('*').eq('id', id).single(),
         supabase.from('evaluations').select('*').eq('employee_id', id),
+        fetchRankCriteria(),
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
       const hist = sortByPeriod(evals || [])
-      const sum = hist.reduce((a, h) => a + Number(h.points || 0), 0)
-      setEmp(deriveEmployee(e, sum))
+      setEmp(deriveEmployee(e, hist, rankCriteria))
       setHistory(hist)
     }
-    load()
+    load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
   }, [id])
 
@@ -43,9 +44,7 @@ export default function EmployeeDetail() {
 
   const breakdown = [
     { l: '평가 포인트', v: emp.evalPts, c: O },
-    { l: '기본 포인트 (연차)', v: emp.base_pts || 0, c: P },
-    { l: '영어 가점', v: emp.eng_pts || 0, c: '#0284c7' },
-    { l: '제2외국어 가점', v: emp.eng2_pts || 0, c: '#14b8a6' },
+    { l: '경력직 백필 포인트', v: emp.backfillPts || 0, c: P },
     { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
     { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
   ]
@@ -71,10 +70,39 @@ export default function EmployeeDetail() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
           <div><div style={fl}>직급</div><div style={fv}>{emp.rank}</div></div>
-          <div><div style={fl}>직군</div><div style={fv}>{emp.track}</div></div>
-          <div><div style={fl}>체류연한</div><div style={fv}>{emp.level}년/{emp.req_tenure}년 {emp.tenureMet ? '✅' : '❌'}</div></div>
-          <div><div style={fl}>진급 기준</div><div style={fv}>{emp.threshold}P</div></div>
+          <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[emp.track] || emp.track}</div></div>
+          {emp.hasCriteria ? (
+            <>
+              <div><div style={fl}>체류연한</div><div style={fv}>{emp.level}년/{emp.req_tenure}년 {emp.tenureMet ? '✅' : '❌'}</div></div>
+              <div><div style={fl}>진급 기준</div><div style={fv}>{emp.threshold}P</div></div>
+            </>
+          ) : (
+            <div style={{ gridColumn: 'span 2' }}><div style={fl}>승진포인트 기준</div><div style={{ ...fv, color: '#94a3b8' }}>해당없음 (임원/부장/수석연구원은 별도 승진 기준을 두지 않음)</div></div>
+          )}
         </div>
+        {(emp.engGated || emp.eng_pts > 0 || emp.eng2_pts > 0) && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
+            <div style={fl}>어학 (승진포인트 합계에는 포함되지 않는 별도 필수요건 필드)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: '#64748b' }}>
+                영어 {emp.eng_pts || 0}P{emp.eng_lifetime ? ' · AL/IH 평생인정' : ''}
+              </span>
+              {emp.eng2_pts > 0 && (
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  제2외국어 {emp.eng2_pts}P{emp.eng2_lifetime ? ' · 평생인정' : ''}
+                </span>
+              )}
+              {emp.engGated && (
+                <>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>승진요건(Im3 이상):</span>
+                  <Bd color={emp.engOk ? G : '#c026d3'} bg={emp.engOk ? '#dcfce7' : '#fae8ff'}>
+                    {emp.engOk ? '✅ 충족' : '❌ 미충족'}
+                  </Bd>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -117,10 +145,15 @@ export default function EmployeeDetail() {
             <span style={{ fontSize: 14, fontWeight: 700 }}>총 승진포인트</span>
             <span style={{ fontSize: 20, fontWeight: 800, color: O }}>{emp.currentPts}P</span>
           </div>
-          <div style={{ marginTop: 8 }}><Prog current={emp.currentPts} max={emp.threshold} /></div>
+          {emp.hasCriteria ? (
+            <div style={{ marginTop: 8 }}><Prog current={emp.currentPts} max={emp.threshold} /></div>
+          ) : (
+            <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>승진포인트 추적 대상이 아니에요.</div>
+          )}
         </div>
       </div>
 
+      {emp.hasCriteria && (
       <div style={crd}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>🔮 2026 시뮬레이션</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
@@ -147,6 +180,7 @@ export default function EmployeeDetail() {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }

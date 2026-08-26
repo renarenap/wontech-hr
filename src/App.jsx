@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard'
 import EmployeeList from './pages/EmployeeList'
 import EmployeeDetail from './pages/EmployeeDetail'
 import Criteria from './pages/Criteria'
+import CriteriaSettings from './pages/CriteriaSettings'
 import HireResign from './pages/HireResign'
 import Transfer from './pages/Transfer'
 import Recruit from './pages/Recruit'
@@ -77,6 +78,7 @@ export default function App() {
             <Route path="/employees" element={<EmployeeList />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/criteria" element={<Criteria />} />
+            <Route path="/criteria-settings" element={<CriteriaSettings />} />
             <Route path="/hire-resign" element={<HireResign />} />
             {/* 예전 주소 호환용 리다이렉트 */}
             <Route path="/hire" element={<Navigate to="/hire-resign" replace />} />

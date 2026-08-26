@@ -40,20 +40,29 @@ export function sortByPeriod(list) {
   return [...list].sort((a, b) => periodSortKey(a.period) - periodSortKey(b.period))
 }
 
-// ═══ 직급 체계 ═══
-// 사무직/연구직: 승진포인트 추적 대상 (체류연한·기준P 있음)
-// 임원: 명단/입퇴사 관리용으로만 목록에 포함 — 승진포인트 추적 대상 아님(체류연한·기준P 0)
+// ═══ 직급/직군 체계 ═══
+// 사무직(일반)/사무직(영어필수)/연구직: 승진포인트 추적 대상 (체류연한·기준P는 rank_criteria 테이블에서 관리 — 하드코딩 아님)
+// 임원: 명단/입퇴사 관리용으로만 목록에 포함 — rank_criteria에 없는 직급이라 자동으로 '해당없음' 처리됨
 export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
 export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
 export const EXEC_RANKS = ['이사', '상무이사', '전무이사', '부사장', '수석부사장', '대표', '부회장', '회장']
 
-// 직급별 체류연한/진급포인트 기본값 (기준표 ⑤ 참고 — 신규 입사자 등록 시 자동 적용)
-export const RANK_DEFAULTS = {
-  사원: { req_tenure: 4, threshold: 24 }, 대리: { req_tenure: 4, threshold: 24 },
-  과장: { req_tenure: 5, threshold: 35 }, 차장: { req_tenure: 5, threshold: 36 }, 부장: { req_tenure: 5, threshold: 40 },
-  연구원: { req_tenure: 4, threshold: 24 }, 전임연구원: { req_tenure: 4, threshold: 24 },
-  선임연구원: { req_tenure: 6, threshold: 40 }, 책임연구원: { req_tenure: 7, threshold: 48 }, 수석연구원: { req_tenure: 4, threshold: 32 },
-  ...Object.fromEntries(EXEC_RANKS.map((r) => [r, { req_tenure: 0, threshold: 0 }])),
+export const TRACKS = [
+  { value: '사무', label: '사무직 (일반)' },
+  { value: '사무영어필수', label: '사무직 (영어필수)' },
+  { value: '연구', label: '연구직' },
+]
+export const TRACK_LABEL = Object.fromEntries(TRACKS.map((t) => [t.value, t.label]))
+
+// 영어필수 트랙 자동 제안 대상 부서 (마케팅·미래전략·해외CS·해외영업 계열 — 한국영업/국내CS 등 국내 담당은 일반으로 분류)
+export const ENGLISH_REQUIRED_DEPTS = [
+  '마케팅실', '미래전략실', '전략기획팀', '해외CS파트', '대전 국내CS파트', '판교 국내CS파트',
+  '글로벌영업실', '글로벌영업팀', '해외법인영업파트', '해외영업팀', '해외법인영업', '해외영업',
+]
+export function suggestTrackForDept(dept, isResearch) {
+  if (isResearch) return '연구'
+  if (!dept) return '사무'
+  return ENGLISH_REQUIRED_DEPTS.some((d) => dept.includes(d) || d.includes(dept)) ? '사무영어필수' : '사무'
 }
 
 // ═══ 부서(파트 단위) 목록 ═══
@@ -69,25 +78,14 @@ export const DEPT_OPTIONS = [
   '해외CS파트', '해외법인영업파트', '해외영업팀', '청소미화',
 ]
 
-// ═══ 직원 파생 필드 계산 ═══
-// employee: employees 테이블 row, evalPtsSum: evaluations.points 합계
-export function deriveEmployee(employee, evalPtsSum = 0) {
-  const addPts =
-    (employee.eng_pts || 0) + (employee.eng2_pts || 0) + (employee.cert_pts || 0) + (employee.award_pts || 0)
-  const currentPts = evalPtsSum + (employee.base_pts || 0) + addPts
-  const gap = Math.max(0, employee.threshold - currentPts)
-  const tenureMet = (employee.level || 0) >= employee.req_tenure
-  const ptsMet = currentPts >= employee.threshold
-  // 임원 등 체류연한·기준P가 0으로 설정된(=승진포인트 추적 대상이 아닌) 직급은 별도 상태로 표시
-  const status = !employee.req_tenure && !employee.threshold
-    ? 'na'
-    : ptsMet && tenureMet ? 'possible' : tenureMet && !ptsMet ? 'ptShort' : 'short'
-  return { ...employee, evalPts: evalPtsSum, addPts, currentPts, gap, tenureMet, ptsMet, status }
-}
+// 직원 파생 필드 계산(deriveEmployee)은 rank_criteria 파라미터 테이블을 참조해야 해서
+// src/lib/promotion.js 로 옮겼습니다 (하드코딩된 직급 기준표 대신 DB 설정값 사용).
 
 export const STATUS_LABEL = {
   possible: { label: '승진 가능', color: G, bg: '#dcfce7' },
-  ptShort: { label: '포인트 부족', color: Y, bg: '#fef9c3' },
+  ptShort: { label: '연차OK·P부족', color: Y, bg: '#fef9c3' },
+  tenureShort: { label: 'P OK·연차부족', color: Y, bg: '#fef9c3' },
+  engShort: { label: '영어 미충족', color: '#c026d3', bg: '#fae8ff' },
   short: { label: '미충족', color: R, bg: '#fee2e2' },
   na: { label: '해당없음', color: '#94a3b8', bg: '#f1f5f9' },
 }
