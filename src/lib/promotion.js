@@ -1,5 +1,8 @@
 // ═══ 승진포인트 계산 로직 (rank_criteria 파라미터 테이블 기반, 하드코딩 없음) ═══
 import { supabase } from '../supabaseClient'
+import { OFFICE_RANKS, RESEARCH_RANKS } from './constants'
+
+const TRACKED_RANKS = new Set([...OFFICE_RANKS, ...RESEARCH_RANKS])
 
 // rank_criteria 테이블 전체를 { [rank]: {req_tenure, threshold, backfill_rate} } 형태로 로드
 export async function fetchRankCriteria() {
@@ -47,13 +50,16 @@ export function engGateMet(employee) {
   return engOk || eng2Ok
 }
 
-// 대시보드/포인트현황 등에서 공통으로 쓰는 직군 구분 — 임원은 저장된 track 값과 무관하게
-// rank_criteria가 없는(hasCriteria === false) 사람으로 판단
+// 대시보드/포인트현황 등에서 공통으로 쓰는 직군 구분.
+// "임원"은 승진 기준 유무(hasCriteria)가 아니라 직급 자체로 판단해야 함 — 부장·수석연구원도
+// 승진 기준이 없어(해당없음) hasCriteria는 false지만, 이들은 임원이 아니라 그냥 사무직/연구직 최고참
+// 직급이라 각자의 트랙(사무/연구) 탭에 그대로 남아있어야 함. TRACKED_RANKS(사원~부장, 연구원~수석연구원)에
+// 없는 직급(이사·상무·대표 등 진짜 임원 + 직급 미확인)만 "임원" 탭으로 분류.
 export const CATEGORIES = [
-  { key: '사무', track: '사무', test: (e) => e.hasCriteria && e.track === '사무' },
-  { key: '사무영어필수', track: '사무영어필수', test: (e) => e.hasCriteria && e.track === '사무영어필수' },
-  { key: '연구', track: '연구', test: (e) => e.hasCriteria && e.track === '연구' },
-  { key: '임원', track: null, test: (e) => !e.hasCriteria },
+  { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무' },
+  { key: '사무영어필수', track: '사무영어필수', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무영어필수' },
+  { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '연구' },
+  { key: '임원', track: null, test: (e) => !TRACKED_RANKS.has(e.rank) },
 ]
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
