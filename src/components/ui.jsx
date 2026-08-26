@@ -62,7 +62,11 @@ export function TenureBar({ level, reqTenure }) {
           +{overflow}
         </span>
       )}
-      <span style={{ fontSize: 11, color, fontWeight: 700, whiteSpace: 'nowrap' }}>{lvl}/{reqTenure}년</span>
+      <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+        <span style={{ color: overflow > 0 ? O : color, fontWeight: overflow > 0 ? 900 : 700 }}>{lvl}</span>
+        <span style={{ color: '#94a3b8', fontWeight: 700 }}>/{reqTenure}년</span>
+        {met && <span style={{ color: G, marginLeft: 3 }}>✓</span>}
+      </span>
     </div>
   )
 }
