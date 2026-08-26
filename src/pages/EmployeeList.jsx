@@ -31,6 +31,8 @@ const CSV_COLUMNS = [
 const CSV_EDITABLE_KEYS = ['name', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
+// 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
+const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, short: 3, na: 4 }
 
 export default function EmployeeList() {
   const navigate = useNavigate()
@@ -96,7 +98,11 @@ export default function EmployeeList() {
       if (statusF === 'short' && e.status === 'possible') return false
       return true
     })
-    l.sort((a, b) => (sortAsc ? (a[sortKey] > b[sortKey] ? 1 : -1) : a[sortKey] < b[sortKey] ? 1 : -1))
+    l.sort((a, b) => {
+      const av = sortKey === 'status' ? (STATUS_SORT_ORDER[a.status] ?? 99) : a[sortKey]
+      const bv = sortKey === 'status' ? (STATUS_SORT_ORDER[b.status] ?? 99) : b[sortKey]
+      return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
+    })
     return l
   }, [employees, scopedByTrack, search, rankF, deptF, teamF, statusF, sortKey, sortAsc])
 
@@ -107,7 +113,7 @@ export default function EmployeeList() {
 
   const hs = (k) => {
     if (sortKey === k) setSortAsc(!sortAsc)
-    else { setSortKey(k); setSortAsc(false) }
+    else { setSortKey(k); setSortAsc(k === 'status') } // 상태는 승진가능이 먼저 오도록 오름차순 기본값
   }
   const ar = (k) => (sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '')
 
@@ -179,7 +185,7 @@ export default function EmployeeList() {
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('currentPts')}>포인트{ar('currentPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('gap')}>잔여{ar('gap')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
-                <th style={thS}>상태</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('status')}>상태{ar('status')}</th>
               </tr>
             </thead>
             <tbody>

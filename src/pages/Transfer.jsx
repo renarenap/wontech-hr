@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, Y, R, B } from '../lib/constants'
 import { Bd, KpiRow, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
@@ -89,15 +89,35 @@ export default function Transfer() {
 
 function AddTransferModal({ onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', type: '부서이동', from_value: '', to_value: '', rank: '', effective_date: '', status: '승인대기', approver: '' })
+  const [employees, setEmployees] = useState([])
+  const [picked, setPicked] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+
+  useEffect(() => {
+    supabase.from('employees').select('id, name, dept, team, rank').order('name').then(({ data }) => setEmployees(data || []))
+  }, [])
+
+  const matches = useMemo(() => {
+    if (picked || !form.name.trim()) return []
+    const q = form.name.trim().toLowerCase()
+    return employees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 8)
+  }, [employees, form.name, picked])
+
+  const pick = (e) => {
+    setPicked(e)
+    setForm((f) => ({
+      ...f, name: e.name, rank: f.rank || e.rank,
+      from_value: f.from_value || `${e.dept}${e.team ? ` · ${e.team}` : ''} / ${e.rank}`,
+    }))
+  }
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     setSaving(true)
-    const { error } = await supabase.from('transfers').insert(form)
+    const { error } = await supabase.from('transfers').insert({ ...form, employee_id: picked?.id || null })
     setSaving(false)
     if (error) { setError(error.message); return }
     onCreated()
@@ -107,7 +127,36 @@ function AddTransferModal({ onClose, onCreated }) {
     <Modal title="발령 추가" onClose={onClose}>
       <form onSubmit={submit}>
         <label style={lbl}>이름</label>
-        <input style={field} required value={form.name} onChange={set('name')} />
+        <div style={{ position: 'relative' }}>
+          <input
+            style={field} required value={form.name} placeholder="이름을 입력해서 검색"
+            onChange={(e) => { setForm({ ...form, name: e.target.value }); setPicked(null) }}
+          />
+          {matches.length > 0 && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, right: 0, marginTop: -6, zIndex: 10,
+              background: '#fff', border: '1px solid var(--border)', borderRadius: 8,
+              boxShadow: '0 8px 20px rgba(0,0,0,.1)', maxHeight: 200, overflow: 'auto',
+            }}>
+              {matches.map((e) => (
+                <div
+                  key={e.id} onClick={() => pick(e)}
+                  style={{ padding: '9px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                  onMouseEnter={(ev) => { ev.currentTarget.style.background = '#f8fafc' }}
+                  onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ fontWeight: 600 }}>{e.name}</span>
+                  <span style={{ color: '#94a3b8', marginLeft: 8 }}>{e.dept}{e.team ? ` · ${e.team}` : ''} · {e.rank}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {picked ? (
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>✅ {picked.name}님으로 선택됨 (승진포인트 데이터와 연결돼요)</div>
+        ) : form.name.trim() && (
+          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>목록에 없는 이름이면 그냥 텍스트로만 저장돼요.</div>
+        )}
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>유형</label>
