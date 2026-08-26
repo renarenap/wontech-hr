@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../supabaseClient'
 import { O, P } from '../lib/constants'
+import wontechSymbol from '../assets/wontech-symbol.png'
+import wontechWordmark from '../assets/wontech-wordmark.png'
 
 const NAV = [
   { to: '/', icon: '📊', label: '대시보드', g: '승진포인트', end: true },
@@ -112,8 +114,9 @@ export default function Layout() {
           onClick={() => navigate('/')}
           style={{ padding: '22px 20px 18px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
         >
-          <div style={{ fontSize: 16, fontWeight: 800, color: O, letterSpacing: 1 }}>WONTECH</div>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 3 }}>HR 관리 시스템</div>
+          <img src={wontechSymbol} alt="WONTECH" style={{ height: 22, display: 'block' }} />
+          <img src={wontechWordmark} alt="wontech" style={{ height: 15, display: 'block', marginTop: 8 }} />
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>HR 관리 시스템</div>
         </div>
         <div style={{ flex: 1, padding: '10px 10px', overflow: 'auto' }}>
           {groups.map((g) => (

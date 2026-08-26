@@ -235,11 +235,20 @@ function ExportImportModal({ employees, onClose, onApplied }) {
   const [error, setError] = useState('')
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
+  const [backedUp, setBackedUp] = useState(false)
 
-  const download = () => {
-    const today = new Date().toISOString().slice(0, 10)
-    downloadCSV(`employees_${today}.csv`, employees, CSV_COLUMNS)
+  const download = (isBackup) => {
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h') + 'm'
+    downloadCSV(`employees_${isBackup ? 'backup_' : ''}${stamp}.csv`, employees, CSV_COLUMNS)
   }
+
+  // 모달을 열면 지금 상태를 자동으로 한 번 백업 다운로드 — 업로드해서 문제가 생겨도
+  // 이 파일을 그대로 다시 업로드하면 지금 상태로 되돌릴 수 있음
+  useEffect(() => {
+    download(true)
+    setBackedUp(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const onFile = async (e) => {
     const file = e.target.files?.[0]
@@ -319,13 +328,18 @@ function ExportImportModal({ employees, onClose, onApplied }) {
     <Modal title="전체 데이터 다운로드 / 업로드" onClose={onClose} width={760}>
       {!rows && (
         <div>
+          {backedUp && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#166534', marginBottom: 14 }}>
+              ✅ 지금 상태로 백업 CSV가 자동으로 다운로드됐어요. 업로드해서 문제가 생기면 이 파일을 그대로 다시 업로드하면 원래대로 되돌릴 수 있어요.
+            </div>
+          )}
           <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 16 }}>
-            1. 아래 버튼으로 전체 명단을 CSV로 받아서 엑셀에서 열어 수정하세요 (맨 앞 <b>id</b> 칸은 지우거나 바꾸지 마세요 — 어떤 사람인지 매칭하는 용도예요).<br />
+            1. 전체 명단을 CSV로 받아서 엑셀에서 열어 수정하세요 (맨 앞 <b>id</b> 칸은 지우거나 바꾸지 마세요 — 어떤 사람인지 매칭하는 용도예요).<br />
             2. 수정 끝나면 <b>CSV로 저장</b>한 다음, 그 파일을 아래에서 업로드하세요.<br />
             3. id가 있는 행은 <b>수정</b>으로, id를 비워두고 이름만 채운 행은 <b>신규 추가</b>로 처리돼요. 행을 통째로 지우는 건 삭제로 인식하지 않아요(안전을 위해 — 퇴사 처리는 "입·퇴사 관리"에서 해주세요).
           </div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button type="button" style={btnPrimary} onClick={download}>⬇ CSV 다운로드 ({employees.length}명)</button>
+            <button type="button" style={btnPrimary} onClick={() => download(false)}>⬇ CSV 다시 다운로드 ({employees.length}명)</button>
           </div>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 6 }}>수정한 CSV 업로드</label>
           <input type="file" accept=".csv" onChange={onFile} />
