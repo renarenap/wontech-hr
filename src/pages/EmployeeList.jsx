@@ -166,6 +166,7 @@ export default function EmployeeList() {
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showExportImport, setShowExportImport] = useState(false)
+  const [expandedIds, setExpandedIds] = useState(() => new Set()) // 소속/평가이력을 펼쳐놓은 행(개별)
 
   useEffect(() => {
     let cancelled = false
@@ -236,6 +237,12 @@ export default function EmployeeList() {
     else { setSortKey(k); setSortAsc(k === 'status') } // 상태는 승진가능이 먼저 오도록 오름차순 기본값
   }
   const ar = (k) => (sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '')
+
+  const toggleExpand = (id) => setExpandedIds((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
 
   if (error) return <ErrorBox error={error} />
   if (!employees) return <Loading />
@@ -314,7 +321,10 @@ export default function EmployeeList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e) => (
+              {filtered.map((e) => {
+                const isOpen = expandedIds.has(e.id)
+                const shortOrg = e.team || e.dept || e.division || '—'
+                return (
                 <tr
                   key={e.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/employees/${e.id}`)}
                   onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
@@ -322,12 +332,21 @@ export default function EmployeeList() {
                 >
                   <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
                   <td style={tdS}><LocationBadges locations={e.locations} /></td>
-                  <td style={{ ...tdS, color: '#64748b' }}>{orgPath(e)}</td>
+                  <td
+                    style={{ ...tdS, color: '#64748b', cursor: 'pointer' }}
+                    onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.id) }}
+                  >
+                    {isOpen ? orgPath(e) : shortOrg}
+                    <span style={{ marginLeft: 5, fontSize: 9, color: '#cbd5e1' }}>{isOpen ? '▾' : '▸'}</span>
+                  </td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
-                  <td style={tdS}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}
+                  <td
+                    style={{ ...tdS, whiteSpace: isOpen ? 'normal' : 'nowrap', cursor: 'pointer' }}
+                    onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.id) }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: isOpen ? 'wrap' : 'nowrap', maxWidth: isOpen ? 280 : undefined, gap: isOpen ? '2px 0' : 0 }}>
+                      {(isOpen ? e.history : e.history.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} />)}
                       <BackfillBadges employee={e} />
                     </div>
                   </td>
@@ -346,7 +365,7 @@ export default function EmployeeList() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         )}
