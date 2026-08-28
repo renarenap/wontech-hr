@@ -30,6 +30,7 @@ create table if not exists employees (
   eng2_lifetime boolean default false,
   cert_pts numeric default 0,
   award_pts numeric default 0,
+  note text,                    -- 자유 메모(겸직 등) — CSV로만 편집, 화면엔 참고용으로만 표시
   created_at timestamptz default now()
 );
 

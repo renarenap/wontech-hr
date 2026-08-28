@@ -68,6 +68,7 @@ export default function EmployeeDetail() {
                 {orgPath(emp)}{emp.role ? ` · ${emp.role}` : ''}
               </div>
             </div>
+            {emp.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>📝 {emp.note}</div>}
           </div>
           <SB status={emp.status} />
         </div>

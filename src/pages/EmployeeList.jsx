@@ -28,9 +28,10 @@ const CSV_COLUMNS = [
   { key: 'eng2_lifetime', label: '제2외국어평생인정(TRUE/FALSE)' },
   { key: 'cert_pts', label: '자격가점' },
   { key: 'award_pts', label: '포상가점' },
+  { key: 'note', label: '비고(겸직 등 자유메모)' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts']
+const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -337,6 +338,7 @@ export default function EmployeeList() {
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>경력인정P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('status')}>상태{ar('status')}</th>
+                <th style={thS}>비고</th>
               </tr>
             </thead>
             <tbody>
@@ -373,6 +375,7 @@ export default function EmployeeList() {
                       })}
                     </div>
                   </td>
+                  <td style={{ ...tdS, color: '#94a3b8', whiteSpace: 'normal', maxWidth: 200 }}>{e.note || ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -589,6 +592,7 @@ function buildPatch(raw) {
     eng2_lifetime: /^(true|1|y|yes)$/i.test((raw['제2외국어평생인정(TRUE/FALSE)'] || '').trim()),
     cert_pts: Number(raw['자격가점']) || 0,
     award_pts: Number(raw['포상가점']) || 0,
+    note: (raw['비고(겸직 등 자유메모)'] || '').trim() || null,
   }
   return patch
 }
