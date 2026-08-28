@@ -30,7 +30,7 @@ function toUserRow(u: any) {
     name: meta.name || '',
     dept: meta.dept || '',
     rank: meta.rank || '',
-    role: meta.role || '팀원',
+    role: meta.role || '부서원',
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at,
   }
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
           name: body.name || '',
           dept: body.dept || '',
           rank: body.rank || '',
-          role: body.role || '팀원',
+          role: body.role || '부서원',
         },
       })
       if (error) return json({ error: error.message }, 400)
@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
           name: body.name || '',
           dept: body.dept || '',
           rank: body.rank || '',
-          role: body.role || '팀원',
+          role: body.role || '부서원',
         },
       })
       if (error) return json({ error: error.message }, 400)

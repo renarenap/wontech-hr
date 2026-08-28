@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { callAdminUsers } from '../lib/adminApi'
-import { O, P } from '../lib/constants'
+import { P } from '../lib/constants'
 import { Bd, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label, btnPrimary, btnGhost } from '../components/ui'
 
-const ROLES = ['관리자', '팀장', '팀원']
-const ROLE_COLOR = { 관리자: { c: O, bg: '#fff7ed' }, 팀장: { c: P, bg: '#f3e8ff' }, 팀원: { c: '#475569', bg: '#f1f5f9' } }
+const ROLES = ['부서장', '부서원']
+const ROLE_COLOR = { 부서장: { c: P, bg: '#f3e8ff' }, 부서원: { c: '#475569', bg: '#f1f5f9' } }
 
 function genPassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
@@ -69,6 +69,20 @@ export default function AccountManage() {
     setBusy(false)
   }
 
+  // 부서명 오타·띄어쓰기 차이(예: "판교인사파트" vs "판교 인사파트")로 그룹이 갈라지는 걸 직접 고칠 수 있게
+  const changeDept = async (u, dept) => {
+    const trimmed = dept.trim()
+    if (!trimmed || trimmed === u.dept) return
+    setBusy(true)
+    try {
+      await callAdminUsers({ action: 'update', id: u.id, name: u.name, dept: trimmed, rank: u.rank, role: u.role })
+      setUsers(users.map((x) => (x.id === u.id ? { ...x, dept: trimmed } : x)))
+    } catch (e) {
+      setError(e)
+    }
+    setBusy(false)
+  }
+
   const removeUser = async (u) => {
     if (!window.confirm(`${u.email} 계정을 삭제할까요? 되돌릴 수 없습니다.`)) return
     setBusy(true)
@@ -108,13 +122,23 @@ export default function AccountManage() {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: '#64748b' }}>{dept} <span style={{ fontWeight: 400, color: '#94a3b8' }}>{list.length}명</span></div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr>{['이메일', '이름', '직급', '역할', '작업'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
+                <tr>{['이메일', '이름', '부서', '직급', '역할', '작업'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {list.map((u) => (
                   <tr key={u.id}>
                     <td style={{ ...tdS, fontWeight: 600 }}>{u.email}</td>
                     <td style={tdS}>{u.name || '—'}</td>
+                    <td style={tdS}>
+                      <input
+                        key={u.dept /* 저장 후(다른 그룹으로 이동) 값이 최신 상태로 다시 뜨도록 */}
+                        style={{ ...inp, padding: '5px 10px', width: 140 }}
+                        defaultValue={u.dept}
+                        disabled={busy}
+                        onBlur={(e) => changeDept(u, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                      />
+                    </td>
                     <td style={tdS}>{u.rank || '—'}</td>
                     <td style={tdS}>
                       <select
@@ -166,7 +190,7 @@ function AddUserModal({ onClose, onCreated }) {
   const [name, setName] = useState('')
   const [dept, setDept] = useState('')
   const [rank, setRank] = useState('')
-  const [role, setRole] = useState('팀원')
+  const [role, setRole] = useState('부서원')
   const [password, setPassword] = useState(genPassword())
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
