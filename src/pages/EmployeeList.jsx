@@ -102,7 +102,10 @@ function HeaderExpandToggle({ expanded, onToggle }) {
       type="button"
       onClick={(ev) => { ev.stopPropagation(); onToggle() }}
       title={expanded ? '접기' : '펼치기'}
-      style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#94a3b8', padding: 0, verticalAlign: 'middle' }}
+      style={{
+        marginLeft: 14, background: '#f1f5f9', border: 'none', borderRadius: 5, cursor: 'pointer',
+        fontSize: 15, fontWeight: 700, color: '#475569', padding: '1px 7px', verticalAlign: 'middle', lineHeight: 1.4,
+      }}
     >
       {expanded ? '▾' : '▸'}
     </button>
@@ -351,7 +354,7 @@ export default function EmployeeList() {
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
                   <td style={{ ...tdS, whiteSpace: historyExpanded ? 'normal' : 'nowrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: historyExpanded ? 'wrap' : 'nowrap', maxWidth: historyExpanded ? 280 : undefined, gap: historyExpanded ? '2px 0' : 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
                       {(historyExpanded ? e.history : e.history.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} />)}
                       {historyExpanded && <BackfillBadges employee={e} />}
                     </div>
