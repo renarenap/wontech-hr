@@ -94,6 +94,21 @@ function BackfillBadges({ employee }) {
 }
 
 // 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/해당없음 중 여러 개를 동시에 켤 수 있음(OR 조건)
+// 컬럼 헤더에 붙는 펼치기/접기 토글(▸/▾) — 클릭 시 그 컬럼의 모든 행이 한꺼번에 펼쳐지거나 접힘.
+// 헤더가 정렬용 onClick을 이미 갖고 있을 수 있어(예: 소속) stopPropagation으로 분리.
+function HeaderExpandToggle({ expanded, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={(ev) => { ev.stopPropagation(); onToggle() }}
+      title={expanded ? '접기' : '펼치기'}
+      style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#94a3b8', padding: 0, verticalAlign: 'middle' }}
+    >
+      {expanded ? '▾' : '▸'}
+    </button>
+  )
+}
+
 function StatusFilterDropdown({ value, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -166,7 +181,8 @@ export default function EmployeeList() {
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showExportImport, setShowExportImport] = useState(false)
-  const [expandedIds, setExpandedIds] = useState(() => new Set()) // 소속/평가이력을 펼쳐놓은 행(개별)
+  const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 실·팀·파트로 펼칠지(헤더 토글, 전체 행 공통)
+  const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
 
   useEffect(() => {
     let cancelled = false
@@ -238,12 +254,6 @@ export default function EmployeeList() {
   }
   const ar = (k) => (sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '')
 
-  const toggleExpand = (id) => setExpandedIds((prev) => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
-
   if (error) return <ErrorBox error={error} />
   if (!employees) return <Loading />
 
@@ -309,10 +319,16 @@ export default function EmployeeList() {
               <tr>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('name')}>이름{ar('name')}</th>
                 <th style={thS}>위치</th>
-                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('dept')}>소속{ar('dept')}</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('dept')}>
+                  소속{ar('dept')}
+                  <HeaderExpandToggle expanded={orgExpanded} onToggle={() => setOrgExpanded((v) => !v)} />
+                </th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('rank')}>직급{ar('rank')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('track')}>직군{ar('track')}</th>
-                <th style={thS}>평가 이력</th>
+                <th style={thS}>
+                  평가 이력
+                  <HeaderExpandToggle expanded={historyExpanded} onToggle={() => setHistoryExpanded((v) => !v)} />
+                </th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('currentPts')}>포인트{ar('currentPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('gap')}>잔여{ar('gap')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
@@ -321,10 +337,7 @@ export default function EmployeeList() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e) => {
-                const isOpen = expandedIds.has(e.id)
-                const shortOrg = e.team || e.dept || e.division || '—'
-                return (
+              {filtered.map((e) => (
                 <tr
                   key={e.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/employees/${e.id}`)}
                   onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
@@ -332,22 +345,15 @@ export default function EmployeeList() {
                 >
                   <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
                   <td style={tdS}><LocationBadges locations={e.locations} /></td>
-                  <td
-                    style={{ ...tdS, color: '#64748b', cursor: 'pointer' }}
-                    onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.id) }}
-                  >
-                    {isOpen ? orgPath(e) : shortOrg}
-                    <span style={{ marginLeft: 5, fontSize: 9, color: '#cbd5e1' }}>{isOpen ? '▾' : '▸'}</span>
+                  <td style={{ ...tdS, color: '#64748b' }}>
+                    {orgExpanded ? orgPath(e) : (e.team || e.dept || e.division || '—')}
                   </td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
-                  <td
-                    style={{ ...tdS, whiteSpace: isOpen ? 'normal' : 'nowrap', cursor: 'pointer' }}
-                    onClick={(ev) => { ev.stopPropagation(); toggleExpand(e.id) }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: isOpen ? 'wrap' : 'nowrap', maxWidth: isOpen ? 280 : undefined, gap: isOpen ? '2px 0' : 0 }}>
-                      {(isOpen ? e.history : e.history.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} />)}
-                      <BackfillBadges employee={e} />
+                  <td style={{ ...tdS, whiteSpace: historyExpanded ? 'normal' : 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: historyExpanded ? 'wrap' : 'nowrap', maxWidth: historyExpanded ? 280 : undefined, gap: historyExpanded ? '2px 0' : 0 }}>
+                      {(historyExpanded ? e.history : e.history.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} />)}
+                      {historyExpanded && <BackfillBadges employee={e} />}
                     </div>
                   </td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
@@ -365,7 +371,7 @@ export default function EmployeeList() {
                     </div>
                   </td>
                 </tr>
-              )})}
+              ))}
             </tbody>
           </table>
         )}
