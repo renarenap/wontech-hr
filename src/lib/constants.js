@@ -27,6 +27,19 @@ export const GRADE_HEIGHT = {
 // 2026 시뮬레이션에서 등급 선택 시 가산되는 예상 포인트
 export const SIM_GRADE_POINTS = { EX: 10, VG: 8, GD: 6, NI: 4 }
 
+// 등급이 아니라 점수로만 존재하는 값(경력인정P 등)을 등급색으로 시각화할 때 쓰는 역매핑 —
+// GRADE_HEIGHT(등급별 점수 스케일)에서 가장 가까운 등급을 찾아줌. 구체계(S~D) 기준으로만 비교.
+const GRADE_ORDER = ['D', 'C', 'B', 'B+', 'A', 'A+', 'S']
+export function nearestGrade(points) {
+  let best = GRADE_ORDER[0]
+  let bestDiff = Infinity
+  GRADE_ORDER.forEach((g) => {
+    const diff = Math.abs((GRADE_HEIGHT[g] || 0) - points)
+    if (diff < bestDiff) { bestDiff = diff; best = g }
+  })
+  return best
+}
+
 // period 문자열('23상','23하',...,'26','27'...) 정렬 키
 export function periodSortKey(period) {
   if (!period) return 0

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, orgPath, P, B, G, R } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
 import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
@@ -35,20 +35,119 @@ const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lif
 const CSV_NUM_KEYS = new Set(['level', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
 const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, short: 3, na: 4 }
+// 상태 필터에서 고를 수 있는 항목 — 실제로 issues 배열에 담기는 값만(상태 컬럼에 뱃지로 뜨는 것과 동일)
+const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'na']
 
-// 경력인정P 산출 근거 툴팁 텍스트
-function backfillTooltip(e) {
-  if (!e.backfillPts) return '경력인정 P 대상 아님'
+// 경력인정P 산출 근거(툴팁 문구) + 평가이력에 점선 배지로 그릴 슬롯 수·등급색을 한 번에 계산
+// - count: 점선 배지 몇 개로 나타낼지(경력직 백필=연차 수, 평가공백 백필=공백 건수)
+// - grade: 슬롯 1개당 점수를 GRADE_HEIGHT에서 가장 가까운 등급으로 역매핑한 색상용 등급 문자
+function backfillDetail(e) {
+  if (!e.backfillPts) return { count: 0, grade: null, tooltip: '경력인정 P 대상 아님' }
   const rate = e.backfillRate || 0
   const lvl = e.level || 0
   if (e.backfill_full_tenure) {
-    return `${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P`
+    return { count: lvl, grade: nearestGrade(rate), tooltip: `${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P` }
   }
-  // 경력직 백필이 아닌 경우엔 평가공백만 백필됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
+  // 경력직 백필이 아닌 경우엔 평가공백만큼만 경력인정됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
   const evaluated = evalCount(e.history)
   const expected = Math.max(0, (lvl - 1) * 2)
   const gapHalves = Math.max(0, expected - evaluated)
-  return `${e.rank} 평가공백 백필 · 예상평가 ${expected}건 − 실제 ${evaluated}건 = 공백 ${gapHalves}건 × ${rate}P÷2 = ${e.backfillPts}P`
+  return {
+    count: gapHalves, grade: nearestGrade(rate / 2),
+    tooltip: `${e.rank} 경력인정P (평가공백분) · 예상평가 ${expected}건 − 실제 ${evaluated}건 = 공백 ${gapHalves}건 × ${rate}P÷2 = ${e.backfillPts}P`,
+  }
+}
+
+// 평가이력 칸에 실제 평가 배지 뒤에 붙는 경력인정P 표시 — 반투명·점선으로 "실제 평가가 아니라 인정된 값"임을 구분
+const BACKFILL_BADGE_MAX = 4
+function BackfillBadge({ grade }) {
+  const color = GRADE_COLOR[grade] || '#94a3b8'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 22, borderRadius: 5,
+      fontSize: 10, fontWeight: 700, color, background: `${color}1a`, border: `1px dashed ${color}`, marginRight: 2, flexShrink: 0,
+    }}>
+      {grade}
+    </span>
+  )
+}
+
+function BackfillBadges({ employee }) {
+  const { count, grade, tooltip } = backfillDetail(employee)
+  if (count <= 0) return null
+  const shown = Math.min(count, BACKFILL_BADGE_MAX)
+  const overflow = count - shown
+  return (
+    <span onClick={(ev) => ev.stopPropagation()}>
+      <Tip content={tooltip}>
+        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {Array.from({ length: shown }).map((_, i) => <BackfillBadge key={i} grade={grade} />)}
+          {overflow > 0 && (
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#fff', background: O, borderRadius: 10, padding: '1px 6px', marginLeft: 1 }}>
+              +{overflow}
+            </span>
+          )}
+        </span>
+      </Tip>
+    </span>
+  )
+}
+
+// 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/해당없음 중 여러 개를 동시에 켤 수 있음(OR 조건)
+function StatusFilterDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    const onDocClick = (ev) => { if (ref.current && !ref.current.contains(ev.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  const toggle = (key) => onChange(value.includes(key) ? value.filter((v) => v !== key) : [...value, key])
+  const label = value.length === 0 ? '전체 상태' : `상태 ${value.length}개 선택`
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        style={{ ...inp, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: value.length > 0 ? 'var(--text)' : undefined }}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {label} <span style={{ fontSize: 9, color: '#94a3b8' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 20, minWidth: 170,
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 8px 20px rgba(0,0,0,.1)', padding: 6,
+        }}>
+          {STATUS_FILTER_KEYS.map((key) => {
+            const cfg = STATUS_LABEL[key]
+            return (
+              <label
+                key={key}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', fontSize: 12, cursor: 'pointer', borderRadius: 6 }}
+                onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
+                onMouseLeave={(ev) => (ev.currentTarget.style.background = 'transparent')}
+              >
+                <input type="checkbox" checked={value.includes(key)} onChange={() => toggle(key)} />
+                <Bd color={cfg.color} bg={cfg.bg}>{cfg.label}</Bd>
+              </label>
+            )
+          })}
+          {value.length > 0 && (
+            <button
+              type="button"
+              style={{ ...btnGhost, width: '100%', marginTop: 4, fontSize: 11, padding: '5px 0' }}
+              onClick={() => onChange([])}
+            >
+              선택 초기화
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function EmployeeList() {
@@ -62,7 +161,7 @@ export default function EmployeeList() {
   const [divF, setDivF] = useState('all')
   const [deptF, setDeptF] = useState('all')
   const [teamF, setTeamF] = useState('all')
-  const [statusF, setStatusF] = useState('all')
+  const [statusF, setStatusF] = useState([]) // 다중선택 — 빈 배열이면 전체(상태 필터 없음)
   const [sortKey, setSortKey] = useState('currentPts')
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -116,8 +215,7 @@ export default function EmployeeList() {
       if (divF !== 'all' && e.division !== divF) return false
       if (deptF !== 'all' && e.dept !== deptF) return false
       if (teamF !== 'all' && e.team !== teamF) return false
-      if (statusF === 'possible' && e.status !== 'possible') return false
-      if (statusF === 'short' && e.status === 'possible') return false
+      if (statusF.length > 0 && !e.issues.some((i) => statusF.includes(i))) return false
       return true
     })
     l.sort((a, b) => {
@@ -192,11 +290,7 @@ export default function EmployeeList() {
           <option value="all">전체 파트</option>
           {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select style={{ ...inp, cursor: 'pointer' }} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
-          <option value="all">전체 상태</option>
-          <option value="possible">승진 가능</option>
-          <option value="short">미충족</option>
-        </select>
+        <StatusFilterDropdown value={statusF} onChange={setStatusF} />
         <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{filtered.length}명</span>
       </div>
       <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--border)', overflow: 'auto', maxHeight: 'calc(100vh - 210px)', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
@@ -231,12 +325,17 @@ export default function EmployeeList() {
                   <td style={{ ...tdS, color: '#64748b' }}>{orgPath(e)}</td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
-                  <td style={tdS}><div style={{ display: 'flex' }}>{e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}</div></td>
+                  <td style={tdS}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      {e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}
+                      <BackfillBadges employee={e} />
+                    </div>
+                  </td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
                   <td style={tdS}><TenureBar level={e.level} reqTenure={e.req_tenure} /></td>
                   <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }} onClick={(ev) => ev.stopPropagation()}>
-                    <Tip content={backfillTooltip(e)}>{e.backfillPts || 0}P</Tip>
+                    <Tip content={backfillDetail(e).tooltip}>{e.backfillPts || 0}P</Tip>
                   </td>
                   <td style={tdS}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>

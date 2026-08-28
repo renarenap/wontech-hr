@@ -44,7 +44,7 @@ export default function EmployeeDetail() {
 
   const breakdown = [
     { l: '평가 포인트', v: emp.evalPts, c: O },
-    { l: '경력직 백필 포인트', v: emp.backfillPts || 0, c: P },
+    { l: '경력인정 포인트', v: emp.backfillPts || 0, c: P },
     { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
     { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
   ]
