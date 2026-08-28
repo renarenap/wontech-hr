@@ -11,7 +11,7 @@ create table if not exists employees (
   name text not null,
   -- 소속 3단계: 실(division, 신규) → 팀(dept, 기존 '소속') → 파트(team, 기존 '팀'). 컬럼명은 마이그레이션 비용 때문에 유지.
   division text,
-  dept text not null,
+  dept text,  -- 실→파트로 바로 이어지고 팀 단계가 없는 조직도 있어서 필수 아님(실/팀/파트 중 최소 하나는 앱에서 검증)
   team text,
   -- 지역: 대전(원텍연구원)/판교(경영그룹)/해외법인. 대전 소속인데 해외 파견 나간 경우처럼 복수 선택 가능해서 배열로 저장.
   locations text[] not null default '{}',
@@ -75,7 +75,7 @@ create table if not exists hires (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   division text,
-  dept text not null,
+  dept text,  -- 실→파트로 바로 이어지고 팀 단계가 없는 조직도 있어서 필수 아님(실/팀/파트 중 최소 하나는 앱에서 검증)
   team text,
   locations text[] not null default '{}',
   rank text,
@@ -97,7 +97,7 @@ create table if not exists resignations (
   employee_id uuid references employees(id),
   name text not null,
   division text,
-  dept text not null,
+  dept text,  -- 실→파트로 바로 이어지고 팀 단계가 없는 조직도 있어서 필수 아님(실/팀/파트 중 최소 하나는 앱에서 검증)
   team text,
   locations text[] not null default '{}',
   rank text,
@@ -148,7 +148,7 @@ create table if not exists recruit_positions (
   id uuid primary key default gen_random_uuid(),
   position text not null,
   division text,
-  dept text not null,
+  dept text,  -- 실→파트로 바로 이어지고 팀 단계가 없는 조직도 있어서 필수 아님(실/팀/파트 중 최소 하나는 앱에서 검증)
   team text,
   locations text[] not null default '{}',
   hire_type text,             -- 경력/신입/신입·경력
