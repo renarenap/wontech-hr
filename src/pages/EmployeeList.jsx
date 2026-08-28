@@ -6,8 +6,8 @@ import { deriveEmployee, evalCount, fetchRankCriteria, CATEGORIES } from '../lib
 import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
-const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
-const CATEGORY_COLOR = { 사무: '#475569', 사무영어필수: B, 연구: P, 임원: '#92400e' }
+const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무외국어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
+const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
 const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 
 // CSV 내보내기/가져오기에 쓰는 편집 가능 컬럼 (id는 매칭용, 절대 수정·삭제 금지)
@@ -19,7 +19,7 @@ const CSV_COLUMNS = [
   { key: 'dept', label: '팀' },
   { key: 'team', label: '파트' },
   { key: 'rank', label: '직급' },
-  { key: 'track', label: '직군(사무/사무영어필수/연구/임원)' },
+  { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
   { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
   { key: 'eng_pts', label: '영어점수' },
@@ -400,7 +400,7 @@ function ExportImportModal({ employees, onClose, onApplied }) {
 
   const download = (isBackup) => {
     const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h') + 'm'
-    // 임원은 실제로는 track(사무/사무영어필수/연구) 값과 무관하게 직급으로만 판단되지만,
+    // 임원은 실제로는 track(사무/사무외국어필수/연구) 값과 무관하게 직급으로만 판단되지만,
     // CSV에서는 헷갈리지 않게 직급이 임원급이면 직군란도 "임원"으로 보여줌(업로드 시엔 다시 사무로 정규화됨)
     const rows = employees.map((e) => (EXEC_RANKS.includes(e.rank) ? { ...e, track: '임원' } : e))
     downloadCSV(`employees_${isBackup ? 'backup_' : ''}${stamp}.csv`, rows, CSV_COLUMNS)
@@ -578,7 +578,7 @@ function buildPatch(raw) {
     rank: (raw['직급'] || '').trim(),
     // "임원"은 실제 DB엔 없는 값(임원 여부는 직급으로 자동 판단) — CSV에서만 편의상 받아주고 사무로 정규화
     track: (() => {
-      const t = (raw['직군(사무/사무영어필수/연구/임원)'] || '').trim()
+      const t = (raw['직군(사무/사무외국어필수/연구/임원)'] || '').trim()
       return t === '임원' ? '사무' : t
     })(),
     level: Number(raw['연차']) || 0,
@@ -598,6 +598,6 @@ function validatePatch(patch) {
   if (!patch.name) errs.push('이름이 비어있어요')
   if (!patch.dept) errs.push('팀이 비어있어요')
   if (!patch.rank) errs.push('직급이 비어있어요')
-  if (!TRACKS.some((t) => t.value === patch.track)) errs.push(`직군 값이 이상해요: "${patch.track}" (사무/사무영어필수/연구 중 하나여야 해요)`)
+  if (!TRACKS.some((t) => t.value === patch.track)) errs.push(`직군 값이 이상해요: "${patch.track}" (사무/사무외국어필수/연구 중 하나여야 해요)`)
   return errs
 }

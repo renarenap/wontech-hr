@@ -60,11 +60,11 @@ export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
 export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
 export const EXEC_RANKS = ['이사', '상무이사', '전무이사', '부사장', '수석부사장', '대표', '부회장', '회장']
 
-// DB에는 그대로 '사무영어필수' 값으로 저장되지만(마이그레이션 비용 때문에 키는 유지),
-// 화면에 보이는 이름은 "외국어필수"입니다 — 영어뿐 아니라 제2외국어로도 요건을 채울 수 있어서요.
+// 값 자체가 "사무외국어필수"입니다 — 영어뿐 아니라 제2외국어로도 요건을 채울 수 있어서
+// 예전 이름(사무영어필수)에서 바꿨습니다. DB(employees.track, CHECK 제약)도 이 값으로 마이그레이션됨.
 export const TRACKS = [
   { value: '사무', label: '사무직 (일반)' },
-  { value: '사무영어필수', label: '사무직 (외국어필수)' },
+  { value: '사무외국어필수', label: '사무직 (외국어필수)' },
   { value: '연구', label: '연구직' },
 ]
 export const TRACK_LABEL = Object.fromEntries(TRACKS.map((t) => [t.value, t.label]))
@@ -77,7 +77,7 @@ export const FOREIGN_LANG_REQUIRED_DEPTS = [
 export function suggestTrackForDept(dept, isResearch) {
   if (isResearch) return '연구'
   if (!dept) return '사무'
-  return FOREIGN_LANG_REQUIRED_DEPTS.some((d) => dept.includes(d) || d.includes(dept)) ? '사무영어필수' : '사무'
+  return FOREIGN_LANG_REQUIRED_DEPTS.some((d) => dept.includes(d) || d.includes(dept)) ? '사무외국어필수' : '사무'
 }
 
 // ═══ 부서(파트 단위) 목록 ═══

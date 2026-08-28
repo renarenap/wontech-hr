@@ -40,7 +40,7 @@ export function computeBackfill(level, R, rankCriteria, backfillFullTenure) {
 const LANG_GATE_RANKS = ['과장', '차장']
 
 export function isEngGateTrack(employee) {
-  return employee.track === '사무영어필수' && LANG_GATE_RANKS.includes(employee.rank)
+  return employee.track === '사무외국어필수' && LANG_GATE_RANKS.includes(employee.rank)
 }
 
 // 영어 또는 제2외국어 중 하나라도 Im3(2점) 이상이거나 평생인정이면 충족 — "영어"가 아니라 "외국어" 요건이라 둘 다 인정
@@ -57,7 +57,7 @@ export function engGateMet(employee) {
 // 없는 직급(이사·상무·대표 등 진짜 임원 + 직급 미확인)만 "임원" 탭으로 분류.
 export const CATEGORIES = [
   { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무' },
-  { key: '사무영어필수', track: '사무영어필수', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무영어필수' },
+  { key: '사무외국어필수', track: '사무외국어필수', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무외국어필수' },
   { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '연구' },
   { key: '임원', track: null, test: (e) => !TRACKED_RANKS.has(e.rank) },
 ]

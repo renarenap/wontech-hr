@@ -5,7 +5,7 @@ import { O, P, G, Y, R, B, TRACK_LABEL } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
 
-const CATEGORY_COLOR = { 사무: '#475569', 사무영어필수: B, 연구: P, 임원: '#92400e' }
+const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
 const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 
 export default function Dashboard() {

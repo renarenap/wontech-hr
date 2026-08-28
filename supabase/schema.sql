@@ -16,7 +16,7 @@ create table if not exists employees (
   -- 지역: 대전(원텍연구원)/판교(경영그룹)/해외법인. 대전 소속인데 해외 파견 나간 경우처럼 복수 선택 가능해서 배열로 저장.
   locations text[] not null default '{}',
   rank text not null,
-  track text not null check (track in ('사무','사무영어필수','연구')),
+  track text not null check (track in ('사무','사무외국어필수','연구')),
   role text,
   level int default 0,          -- 연차
   -- req_tenure/threshold는 더 이상 계산에 쓰이지 않음(0 저장) — rank_criteria 테이블이 단일 소스
