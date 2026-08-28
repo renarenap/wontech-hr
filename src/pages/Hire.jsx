@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, B, Y } from '../lib/constants'
-import { Bd, Check, DdayBd, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { P, G, O, B, Y, orgPath } from '../lib/constants'
+import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
   ['offer_sent', '오퍼레터 발송'],
@@ -73,7 +73,7 @@ export default function Hire({ hideAdd = false }) {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>입사 예정자</div>
           {hires.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['이름', '위치', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {hires.map((h) => {
                   const st = stCfg[h.status] || { c: '#64748b', bg: '#f1f5f9' }
@@ -83,7 +83,8 @@ export default function Hire({ hideAdd = false }) {
                       onMouseEnter={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = 'transparent' }}>
                       <td style={{ ...tdS, fontWeight: 600 }}>{h.name}</td>
-                      <td style={{ ...tdS, color: '#64748b' }}>{h.dept}{h.team ? ` · ${h.team}` : ''}</td>
+                      <td style={tdS}><LocationBadges locations={h.locations} /></td>
+                      <td style={{ ...tdS, color: '#64748b' }}>{orgPath(h)}</td>
                       <td style={tdS}>{h.rank}</td>
                       <td style={tdS}><Bd color="#475569" bg="#f1f5f9">{h.hire_type}</Bd></td>
                       <td style={tdS}>{h.join_date}</td>
@@ -101,7 +102,10 @@ export default function Hire({ hideAdd = false }) {
         {s && (
           <div style={crd}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{s.name}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>{s.dept}{s.team ? ` · ${s.team}` : ''} · {s.rank} · {s.hire_type}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <LocationBadges locations={s.locations} />
+              <div style={{ fontSize: 12, color: '#64748b' }}>{orgPath(s)} · {s.rank} · {s.hire_type}</div>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>입사일</div><div style={{ fontSize: 14, fontWeight: 600 }}>{s.join_date}</div></div>
               <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>D-Day</div><div style={{ fontSize: 14, fontWeight: 600, color: s.dDay <= 14 ? O : P }}>{s.dDay <= 0 ? `D${s.dDay}` : `D-${s.dDay}`}</div></div>
@@ -120,7 +124,7 @@ export default function Hire({ hideAdd = false }) {
 }
 
 function AddHireModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', dept: '', team: '', rank: '', hire_type: '경력', join_date: '', status: '처우협의중' })
+  const [form, setForm] = useState({ name: '', division: '', dept: '', team: '', locations: [], rank: '', hire_type: '경력', join_date: '', status: '처우협의중' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -129,7 +133,7 @@ function AddHireModal({ onClose, onCreated }) {
     e.preventDefault()
     setError('')
     setSaving(true)
-    const { error } = await supabase.from('hires').insert({ ...form, team: form.team || null })
+    const { error } = await supabase.from('hires').insert({ ...form, division: form.division || null, team: form.team || null })
     setSaving(false)
     if (error) { setError(error.message); return }
     onCreated()
@@ -140,9 +144,12 @@ function AddHireModal({ onClose, onCreated }) {
       <form onSubmit={submit}>
         <label style={lbl}>이름</label>
         <input style={field} required value={form.name} onChange={set('name')} />
+        <label style={lbl}>위치</label>
+        <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>

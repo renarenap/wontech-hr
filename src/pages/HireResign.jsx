@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, suggestTrackForDept } from '../lib/constants'
-import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd } from '../components/ui'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, orgPath, suggestTrackForDept } from '../lib/constants'
+import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
 import Resign from './Resign'
@@ -13,11 +13,11 @@ function SectionTitle({ icon, children }) {
 
 // ═══ 공용 로직: 승진포인트 employees 데이터에 입사자 추가 (+ 온보딩/입사체크리스트) ═══
 // req_tenure/threshold는 더 이상 employees 행에 저장하지 않고 rank_criteria 파라미터 테이블에서 읽어옴(하드코딩 금지)
-async function addHireToRoster({ name, dept, rank, track, join_date, level = 0, backfillFullTenure = false }) {
+async function addHireToRoster({ name, division = null, dept, team = null, locations = [], rank, track, join_date, level = 0, backfillFullTenure = false }) {
   const { data: emp, error: e1 } = await supabase
     .from('employees')
     .insert({
-      name, dept, rank, track, role: '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
+      name, division, dept, team, locations, rank, track, role: '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
       backfill_full_tenure: backfillFullTenure,
     })
     .select()
@@ -35,7 +35,7 @@ async function addHireToRoster({ name, dept, rank, track, join_date, level = 0, 
   const { error: e3 } = await supabase.from('onboarding_tasks').insert(tasks)
   if (e3) throw new Error(e3.message)
 
-  const { error: e4 } = await supabase.from('hires').insert({ name, dept, rank, join_date, status: '입사확정' })
+  const { error: e4 } = await supabase.from('hires').insert({ name, division, dept, team, locations, rank, join_date, status: '입사확정' })
   if (e4) throw new Error(e4.message)
 
   return emp
@@ -51,7 +51,7 @@ async function resignEmployee(picked, lastDay) {
   if (e0) throw new Error(e0.message)
 
   const { error: e2 } = await supabase.from('employees_archive').insert({
-    original_id: picked.id, name: picked.name, dept: picked.dept, team: picked.team, rank: picked.rank,
+    original_id: picked.id, name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, eng2_pts: picked.eng2_pts, cert_pts: picked.cert_pts, award_pts: picked.award_pts,
     eng_lifetime: picked.eng_lifetime, eng2_lifetime: picked.eng2_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
@@ -66,7 +66,7 @@ async function resignEmployee(picked, lastDay) {
   if (e3) throw new Error(e3.message)
 
   const { error: e4 } = await supabase.from('resignations').insert({
-    name: picked.name, dept: picked.dept, team: picked.team, rank: picked.rank,
+    name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
     submit_date: lastDay, last_day: lastDay, status: '진행중',
   })
   if (e4) throw new Error(e4.message)
@@ -75,7 +75,7 @@ async function resignEmployee(picked, lastDay) {
 // ═══ 공용 로직: 퇴사(삭제) 이력에서 복구 — employees_archive → employees로 되돌림 ═══
 async function restoreEmployee(archived) {
   const payload = {
-    name: archived.name, dept: archived.dept, team: archived.team, rank: archived.rank,
+    name: archived.name, division: archived.division, dept: archived.dept, team: archived.team, locations: archived.locations || [], rank: archived.rank,
     track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure || 0, threshold: archived.threshold || 0,
     base_pts: archived.base_pts, eng_pts: archived.eng_pts, eng2_pts: archived.eng2_pts, cert_pts: archived.cert_pts, award_pts: archived.award_pts,
     eng_lifetime: archived.eng_lifetime, eng2_lifetime: archived.eng2_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
@@ -152,8 +152,11 @@ export default function HireResign() {
 function QuickAddHireModal({ onClose, onCreated }) {
   const [depts, setDepts] = useState([])
   const [name, setName] = useState('')
+  const [locations, setLocations] = useState([])
+  const [division, setDivision] = useState('')
   const [dept, setDept] = useState('')
   const [customDept, setCustomDept] = useState('')
+  const [team, setTeam] = useState('')
   const [joinDate, setJoinDate] = useState('')
   const [rank, setRank] = useState('')
   const [track, setTrack] = useState('')
@@ -185,13 +188,13 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!deptVal) { setError('부서를 선택하거나 입력해주세요.'); return }
+    if (!deptVal) { setError('팀을 선택하거나 입력해주세요.'); return }
     if (!rank) { setError('직위를 선택해주세요.'); return }
     if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
     try {
-      await addHireToRoster({ name, dept: deptVal, rank, track, join_date: joinDate, level, backfillFullTenure })
+      await addHireToRoster({ name, division: division || null, dept: deptVal, team: team || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -205,15 +208,24 @@ function QuickAddHireModal({ onClose, onCreated }) {
         <label style={lbl}>이름</label>
         <input style={field} required value={name} onChange={(e) => setName(e.target.value)} />
 
-        <label style={lbl}>부서</label>
+        <label style={lbl}>위치</label>
+        <LocationPicker value={locations} onChange={setLocations} />
+
+        <label style={lbl}>실</label>
+        <input style={field} placeholder="예: 글로벌영업실 (없으면 비워두세요)" value={division} onChange={(e) => setDivision(e.target.value)} />
+
+        <label style={lbl}>팀</label>
         <select style={field} required value={dept} onChange={(e) => setDept(e.target.value)}>
           <option value="" disabled>선택하세요</option>
           {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-          <option value="__custom__">+ 새 부서 직접 입력</option>
+          <option value="__custom__">+ 새 팀 직접 입력</option>
         </select>
         {dept === '__custom__' && (
-          <input style={field} required placeholder="새 부서명" value={customDept} onChange={(e) => setCustomDept(e.target.value)} />
+          <input style={field} required placeholder="새 팀명" value={customDept} onChange={(e) => setCustomDept(e.target.value)} />
         )}
+
+        <label style={lbl}>파트</label>
+        <input style={field} placeholder="예: 해외CS파트 (없으면 비워두세요)" value={team} onChange={(e) => setTeam(e.target.value)} />
 
         <label style={lbl}>입사일</label>
         <input style={field} type="date" required value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
@@ -242,7 +254,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
         </select>
         {!isResearch && (
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
-            부서 기준으로 자동 제안됩니다 (마케팅·미래전략·해외CS·해외영업 계열 → 외국어필수). 필요하면 직접 바꿔주세요.
+            팀 기준으로 자동 제안됩니다 (마케팅·미래전략·해외CS·해외영업 계열 → 외국어필수). 필요하면 직접 바꿔주세요.
           </div>
         )}
 
@@ -338,7 +350,7 @@ function QuickAddResignModal({ onClose, onCreated }) {
                 >
                   <span style={{ fontWeight: 600 }}>{e.name}</span>
                   <span style={{ color: '#94a3b8', marginLeft: 8 }}>
-                    {e.dept}{e.team ? ` · ${e.team}` : ''} · {e.rank}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
+                    {orgPath(e)} · {e.rank}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
                   </span>
                 </div>
               ))}
@@ -348,9 +360,12 @@ function QuickAddResignModal({ onClose, onCreated }) {
 
         {picked && (
           <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12, margin: '10px 0', fontSize: 12, lineHeight: 1.8 }}>
-            <div><b>{picked.name}</b> · {TRACK_LABEL[picked.track] || picked.track} · {picked.rank}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <b>{picked.name}</b> · {TRACK_LABEL[picked.track] || picked.track} · {picked.rank}
+              <LocationBadges locations={picked.locations} />
+            </div>
             <div style={{ color: '#64748b' }}>
-              {picked.dept}{picked.team ? ` · ${picked.team}` : ''}
+              {orgPath(picked)}
               {picked.join_date ? ` · 입사일 ${picked.join_date}` : ' · 입사일 정보 없음'}
             </div>
           </div>
@@ -611,12 +626,13 @@ function ArchiveList({ onRestored }) {
       {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
       {list.length === 0 ? <EmptyState label="퇴사(삭제) 이력이 없습니다" /> : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr>{['이름', '소속', '직급', '퇴사일', '보관일시', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead><tr>{['이름', '위치', '소속', '직급', '퇴사일', '보관일시', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
             {list.map((a) => (
               <tr key={a.id}>
                 <td style={{ ...tdS, fontWeight: 600 }}>{a.name}</td>
-                <td style={{ ...tdS, color: '#64748b' }}>{a.dept}{a.team ? ` · ${a.team}` : ''}</td>
+                <td style={tdS}><LocationBadges locations={a.locations} /></td>
+                <td style={{ ...tdS, color: '#64748b' }}>{orgPath(a)}</td>
                 <td style={tdS}>{a.rank}</td>
                 <td style={tdS}>{a.resign_date}</td>
                 <td style={{ ...tdS, color: '#94a3b8' }}>{a.archived_at?.slice(0, 10)}</td>

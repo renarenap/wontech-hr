@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GRADE_COLOR, STATUS_LABEL, G, P, Y, R, B, O } from '../lib/constants'
+import { GRADE_COLOR, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, G, P, Y, R, B, O } from '../lib/constants'
 
 // ═══ 공통 스타일 ═══
 export const thS = {
@@ -127,15 +127,18 @@ export function dDayFrom(dateStr) {
   return Math.ceil((d - n) / 864e5)
 }
 
-// 세부항목에 마우스를 올리면 예시/부연설명을 보여주는 툴팁
+// 세부항목에 마우스를 올리거나 클릭하면 예시/부연설명을 보여주는 툴팁 (클릭하면 고정 표시 — 다시 클릭해서 닫음)
 export function Tip({ children, content, width = 260 }) {
-  const [show, setShow] = useState(false)
+  const [hover, setHover] = useState(false)
+  const [pinned, setPinned] = useState(false)
   if (!content) return children
+  const show = hover || pinned
   return (
     <span
       style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'help' }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={(e) => { e.stopPropagation(); setPinned((p) => !p) }}
     >
       <span style={{ borderBottom: '1px dashed #cbd5e1' }}>{children}</span>
       <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700 }}>ⓘ</span>
@@ -211,4 +214,45 @@ export function Modal({ title, onClose, children, width = 380 }) {
 
 export function AddButton({ children = '+ 추가', onClick }) {
   return <button style={btnPrimary} onClick={onClick}>{children}</button>
+}
+
+// ═══ 지역(위치) 뱃지 / 다중선택 피커 — 대전·판교·해외법인, 파견 등으로 복수 선택 가능 ═══
+export function LocationBadges({ locations }) {
+  const arr = Array.isArray(locations) ? locations.filter(Boolean) : []
+  if (arr.length === 0) return <span style={{ fontSize: 11, color: '#cbd5e1' }}>미지정</span>
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {arr.map((loc) => {
+        const st = LOCATION_STYLE[loc] || { c: '#64748b', bg: '#f1f5f9' }
+        return <Bd key={loc} color={st.c} bg={st.bg}>{loc}</Bd>
+      })}
+    </div>
+  )
+}
+
+export function LocationPicker({ value, onChange }) {
+  const arr = Array.isArray(value) ? value : []
+  const toggle = (loc) => onChange(arr.includes(loc) ? arr.filter((v) => v !== loc) : [...arr, loc])
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+      {LOCATIONS.map((loc) => {
+        const on = arr.includes(loc)
+        const st = LOCATION_STYLE[loc] || { c: '#64748b', bg: '#f1f5f9' }
+        return (
+          <label
+            key={loc}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20,
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              color: on ? st.c : '#94a3b8', background: on ? st.bg : '#f1f5f9',
+              border: `1px solid ${on ? st.c : 'transparent'}`,
+            }}
+          >
+            <input type="checkbox" checked={on} onChange={() => toggle(loc)} style={{ accentColor: st.c }} />
+            {loc}
+          </label>
+        )
+      })}
+    </div>
+  )
 }

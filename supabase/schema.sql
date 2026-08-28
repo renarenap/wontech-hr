@@ -9,8 +9,12 @@ create extension if not exists pgcrypto;
 create table if not exists employees (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  -- 소속 3단계: 실(division, 신규) → 팀(dept, 기존 '소속') → 파트(team, 기존 '팀'). 컬럼명은 마이그레이션 비용 때문에 유지.
+  division text,
   dept text not null,
   team text,
+  -- 지역: 대전(원텍연구원)/판교(경영그룹)/해외법인. 대전 소속인데 해외 파견 나간 경우처럼 복수 선택 가능해서 배열로 저장.
+  locations text[] not null default '{}',
   rank text not null,
   track text not null check (track in ('사무','사무영어필수','연구')),
   role text,
@@ -69,8 +73,10 @@ create table if not exists onboarding_tasks (
 create table if not exists hires (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  division text,
   dept text not null,
   team text,
+  locations text[] not null default '{}',
   rank text,
   hire_type text,             -- 신입/경력
   join_date date not null,
@@ -89,8 +95,10 @@ create table if not exists resignations (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references employees(id),
   name text not null,
+  division text,
   dept text not null,
   team text,
+  locations text[] not null default '{}',
   rank text,
   reason text,                -- 개인사유/이직 등
   submit_date date not null,
@@ -109,7 +117,7 @@ create table if not exists employees_archive (
   id uuid primary key default gen_random_uuid(),
   original_id uuid,
   name text not null,
-  dept text, team text, rank text, track text, role text,
+  division text, dept text, team text, locations text[], rank text, track text, role text,
   level int, req_tenure int, threshold int,
   base_pts numeric, backfill_full_tenure boolean, eng_pts numeric, eng_lifetime boolean,
   eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, award_pts numeric,
@@ -138,8 +146,10 @@ create table if not exists transfers (
 create table if not exists recruit_positions (
   id uuid primary key default gen_random_uuid(),
   position text not null,
+  division text,
   dept text not null,
   team text,
+  locations text[] not null default '{}',
   hire_type text,             -- 경력/신입/신입·경력
   level text,
   status text default '공고중', -- 공고중/서류심사/면접진행/최종협의/마감

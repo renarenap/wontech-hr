@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, P, B, G, R } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
-import { Bd, GB, Prog, TenureBar, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, orgPath, P, B, G, R } from '../lib/constants'
+import { deriveEmployee, evalCount, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
+import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무영어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
@@ -14,8 +14,10 @@ const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 const CSV_COLUMNS = [
   { key: 'id', label: 'id' },
   { key: 'name', label: '이름' },
-  { key: 'dept', label: '소속' },
-  { key: 'team', label: '팀' },
+  { key: 'locations', label: '위치(대전/판교/해외법인, 복수는 쉼표로 구분)' },
+  { key: 'division', label: '실' },
+  { key: 'dept', label: '팀' },
+  { key: 'team', label: '파트' },
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무영어필수/연구)' },
   { key: 'level', label: '연차' },
@@ -28,11 +30,26 @@ const CSV_COLUMNS = [
   { key: 'award_pts', label: '포상가점' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts']
+const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
 const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, short: 3, na: 4 }
+
+// 경력인정P 산출 근거 툴팁 텍스트
+function backfillTooltip(e) {
+  if (!e.backfillPts) return '경력인정 P 대상 아님'
+  const rate = e.backfillRate || 0
+  const lvl = e.level || 0
+  if (e.backfill_full_tenure) {
+    return `${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P`
+  }
+  // 경력직 백필이 아닌 경우엔 평가공백만 백필됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
+  const evaluated = evalCount(e.history)
+  const expected = Math.max(0, (lvl - 1) * 2)
+  const gapHalves = Math.max(0, expected - evaluated)
+  return `${e.rank} 평가공백 백필 · 예상평가 ${expected}건 − 실제 ${evaluated}건 = 공백 ${gapHalves}건 × ${rate}P÷2 = ${e.backfillPts}P`
+}
 
 export default function EmployeeList() {
   const navigate = useNavigate()
@@ -41,6 +58,8 @@ export default function EmployeeList() {
   const [search, setSearch] = useState('')
   const [trackF, setTrackF] = useState('all') // 'all' | CATEGORIES[].key
   const [rankF, setRankF] = useState('all')
+  const [locF, setLocF] = useState('all')
+  const [divF, setDivF] = useState('all')
   const [deptF, setDeptF] = useState('all')
   const [teamF, setTeamF] = useState('all')
   const [statusF, setStatusF] = useState('all')
@@ -84,14 +103,17 @@ export default function EmployeeList() {
   }, [employees, trackF])
 
   const rankOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.rank))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
+  const divOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.division).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
   const deptOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.dept).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
   const teamOptions = useMemo(() => [...new Set(scopedByTrack.map((e) => e.team).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')), [scopedByTrack])
 
   const filtered = useMemo(() => {
     if (!employees) return []
     let l = scopedByTrack.filter((e) => {
-      if (search && !e.name.includes(search) && !e.dept.includes(search) && !(e.team || '').includes(search)) return false
+      if (search && !e.name.includes(search) && !e.dept.includes(search) && !(e.team || '').includes(search) && !(e.division || '').includes(search)) return false
       if (rankF !== 'all' && e.rank !== rankF) return false
+      if (locF !== 'all' && !(e.locations || []).includes(locF)) return false
+      if (divF !== 'all' && e.division !== divF) return false
       if (deptF !== 'all' && e.dept !== deptF) return false
       if (teamF !== 'all' && e.team !== teamF) return false
       if (statusF === 'possible' && e.status !== 'possible') return false
@@ -104,11 +126,11 @@ export default function EmployeeList() {
       return sortAsc ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
     })
     return l
-  }, [employees, scopedByTrack, search, rankF, deptF, teamF, statusF, sortKey, sortAsc])
+  }, [employees, scopedByTrack, search, rankF, locF, divF, deptF, teamF, statusF, sortKey, sortAsc])
 
-  // 직군 탭을 바꾸면 그 탭에 없는 값으로 걸려있던 직급/부서/팀 필터는 초기화
+  // 직군 탭을 바꾸면 그 탭에 없는 값으로 걸려있던 직급/실/팀/파트 필터는 초기화
   useEffect(() => {
-    setRankF('all'); setDeptF('all'); setTeamF('all')
+    setRankF('all'); setDivF('all'); setDeptF('all'); setTeamF('all')
   }, [trackF])
 
   const hs = (k) => {
@@ -149,17 +171,25 @@ export default function EmployeeList() {
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 부서 · 팀" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 실 · 팀 · 파트" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select style={{ ...inp, cursor: 'pointer' }} value={rankF} onChange={(e) => setRankF(e.target.value)}>
           <option value="all">전체 직급</option>
           {rankOptions.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
+        <select style={{ ...inp, cursor: 'pointer' }} value={locF} onChange={(e) => setLocF(e.target.value)}>
+          <option value="all">전체 지역</option>
+          {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+        </select>
+        <select style={{ ...inp, cursor: 'pointer' }} value={divF} onChange={(e) => setDivF(e.target.value)}>
+          <option value="all">전체 실</option>
+          {divOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={deptF} onChange={(e) => setDeptF(e.target.value)}>
-          <option value="all">전체 부서</option>
+          <option value="all">전체 팀</option>
           {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={teamF} onChange={(e) => setTeamF(e.target.value)}>
-          <option value="all">전체 팀</option>
+          <option value="all">전체 파트</option>
           {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={statusF} onChange={(e) => setStatusF(e.target.value)}>
@@ -177,14 +207,15 @@ export default function EmployeeList() {
             <thead>
               <tr>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('name')}>이름{ar('name')}</th>
+                <th style={thS}>위치</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('dept')}>소속{ar('dept')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('rank')}>직급{ar('rank')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('track')}>직군{ar('track')}</th>
                 <th style={thS}>평가 이력</th>
-                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>백필P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('currentPts')}>포인트{ar('currentPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('gap')}>잔여{ar('gap')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
+                <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>경력인정P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('status')}>상태{ar('status')}</th>
               </tr>
             </thead>
@@ -196,14 +227,17 @@ export default function EmployeeList() {
                   onMouseLeave={(ev) => (ev.currentTarget.style.background = 'transparent')}
                 >
                   <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
-                  <td style={{ ...tdS, color: '#64748b' }}>{e.dept}{e.team ? ` · ${e.team}` : ''}</td>
+                  <td style={tdS}><LocationBadges locations={e.locations} /></td>
+                  <td style={{ ...tdS, color: '#64748b' }}>{orgPath(e)}</td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
                   <td style={tdS}><div style={{ display: 'flex' }}>{e.history.slice(-6).map((h) => <GB key={h.period} grade={h.grade} />)}</div></td>
-                  <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }}>{e.backfillPts || 0}P</td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
                   <td style={tdS}><TenureBar level={e.level} reqTenure={e.req_tenure} /></td>
+                  <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }} onClick={(ev) => ev.stopPropagation()}>
+                    <Tip content={backfillTooltip(e)}>{e.backfillPts || 0}P</Tip>
+                  </td>
                   <td style={tdS}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {e.issues.map((i) => {
@@ -407,8 +441,10 @@ function ExportImportModal({ employees, onClose, onApplied }) {
 function buildPatch(raw) {
   const patch = {
     name: (raw['이름'] || '').trim(),
-    dept: (raw['소속'] || '').trim(),
-    team: (raw['팀'] || '').trim() || null,
+    locations: (raw['위치(대전/판교/해외법인, 복수는 쉼표로 구분)'] || '').split(',').map((s) => s.trim()).filter(Boolean),
+    division: (raw['실'] || '').trim() || null,
+    dept: (raw['팀'] || '').trim(),
+    team: (raw['파트'] || '').trim() || null,
     rank: (raw['직급'] || '').trim(),
     track: (raw['직군(사무/사무영어필수/연구)'] || '').trim(),
     level: Number(raw['연차']) || 0,
@@ -426,7 +462,7 @@ function buildPatch(raw) {
 function validatePatch(patch) {
   const errs = []
   if (!patch.name) errs.push('이름이 비어있어요')
-  if (!patch.dept) errs.push('소속이 비어있어요')
+  if (!patch.dept) errs.push('팀이 비어있어요')
   if (!patch.rank) errs.push('직급이 비어있어요')
   if (!TRACKS.some((t) => t.value === patch.track)) errs.push(`직군 값이 이상해요: "${patch.track}" (사무/사무영어필수/연구 중 하나여야 해요)`)
   return errs

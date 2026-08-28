@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, R, B } from '../lib/constants'
-import { Bd, KpiRow, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { P, G, O, Y, R, B, orgPath } from '../lib/constants'
+import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const TYPE_CFG = {
   부서이동: { c: B, bg: '#e0f2fe' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
@@ -96,7 +96,7 @@ function AddTransferModal({ onClose, onCreated }) {
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   useEffect(() => {
-    supabase.from('employees').select('id, name, dept, team, rank').order('name').then(({ data }) => setEmployees(data || []))
+    supabase.from('employees').select('id, name, division, dept, team, locations, rank').order('name').then(({ data }) => setEmployees(data || []))
   }, [])
 
   const matches = useMemo(() => {
@@ -109,7 +109,7 @@ function AddTransferModal({ onClose, onCreated }) {
     setPicked(e)
     setForm((f) => ({
       ...f, name: e.name, rank: f.rank || e.rank,
-      from_value: f.from_value || `${e.dept}${e.team ? ` · ${e.team}` : ''} / ${e.rank}`,
+      from_value: f.from_value || `${orgPath(e)} / ${e.rank}`,
     }))
   }
 
@@ -146,7 +146,8 @@ function AddTransferModal({ onClose, onCreated }) {
                   onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
                 >
                   <span style={{ fontWeight: 600 }}>{e.name}</span>
-                  <span style={{ color: '#94a3b8', marginLeft: 8 }}>{e.dept}{e.team ? ` · ${e.team}` : ''} · {e.rank}</span>
+                  <span style={{ color: '#94a3b8', marginLeft: 8 }}>{orgPath(e)} · {e.rank}</span>
+                  <span style={{ marginLeft: 8 }}><LocationBadges locations={e.locations} /></span>
                 </div>
               ))}
             </div>

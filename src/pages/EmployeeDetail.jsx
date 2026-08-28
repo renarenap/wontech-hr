@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, O, P, G, Y, R } from '../lib/constants'
+import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
-import { SB, Bd, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
+import { SB, Bd, LocationBadges, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -62,8 +62,11 @@ export default function EmployeeDetail() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 800 }}>{emp.name}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              {emp.dept}{emp.team ? ` · ${emp.team}` : ''}{emp.role ? ` · ${emp.role}` : ''}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <LocationBadges locations={emp.locations} />
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                {orgPath(emp)}{emp.role ? ` · ${emp.role}` : ''}
+              </div>
             </div>
           </div>
           <SB status={emp.status} />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, B } from '../lib/constants'
-import { Bd, KpiRow, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { P, G, O, Y, B, orgPath } from '../lib/constants'
+import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const STATUS_CFG = {
   최종협의: { c: '#7c3aed', bg: '#f3e8ff' }, 면접진행: { c: O, bg: '#fff7ed' }, 서류심사: { c: B, bg: '#e0f2fe' }, 공고중: { c: G, bg: '#dcfce7' }, 마감: { c: '#64748b', bg: '#f1f5f9' },
@@ -75,7 +75,7 @@ export default function Recruit() {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>채용 포지션</div>
           {filtered.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['포지션', '소속', '유형', '레벨', '지원자', '상태', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['포지션', '위치', '소속', '유형', '레벨', '지원자', '상태', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {filtered.map((p) => {
                   const st = STATUS_CFG[p.status] || { c: '#64748b', bg: '#f1f5f9' }
@@ -86,7 +86,8 @@ export default function Recruit() {
                       onMouseEnter={(ev) => { if (sel !== p.id) ev.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={(ev) => { if (sel !== p.id) ev.currentTarget.style.background = 'transparent' }}>
                       <td style={{ ...tdS, fontWeight: 600 }}>{p.position}</td>
-                      <td style={{ ...tdS, color: '#64748b' }}>{p.dept}</td>
+                      <td style={tdS}><LocationBadges locations={p.locations} /></td>
+                      <td style={{ ...tdS, color: '#64748b' }}>{orgPath(p)}</td>
                       <td style={tdS}>{p.hire_type}</td>
                       <td style={tdS}>{p.level}</td>
                       <td style={tdS}><span style={{ fontWeight: 600, color: cands.length ? P : '#94a3b8' }}>{cands.length}명</span></td>
@@ -104,7 +105,10 @@ export default function Recruit() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{s.position}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>{s.dept}{s.team ? ` · ${s.team}` : ''} · {s.hire_type} · {s.level}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                  <LocationBadges locations={s.locations} />
+                  <div style={{ fontSize: 12, color: '#64748b' }}>{orgPath(s)} · {s.hire_type} · {s.level}</div>
+                </div>
               </div>
               <button style={{ ...btnGhost, padding: '5px 12px', fontSize: 11 }} onClick={() => setShowAddCand(true)}>+ 지원자 추가</button>
             </div>
@@ -135,7 +139,7 @@ export default function Recruit() {
 }
 
 function AddPositionModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ position: '', dept: '', team: '', hire_type: '경력', level: '', status: '공고중', open_date: '' })
+  const [form, setForm] = useState({ position: '', division: '', dept: '', team: '', locations: [], hire_type: '경력', level: '', status: '공고중', open_date: '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -144,7 +148,7 @@ function AddPositionModal({ onClose, onCreated }) {
     e.preventDefault()
     setError('')
     setSaving(true)
-    const { error } = await supabase.from('recruit_positions').insert({ ...form, team: form.team || null })
+    const { error } = await supabase.from('recruit_positions').insert({ ...form, division: form.division || null, team: form.team || null })
     setSaving(false)
     if (error) { setError(error.message); return }
     onCreated()
@@ -155,9 +159,12 @@ function AddPositionModal({ onClose, onCreated }) {
       <form onSubmit={submit}>
         <label style={lbl}>포지션명</label>
         <input style={field} required value={form.position} onChange={set('position')} />
+        <label style={lbl}>위치</label>
+        <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>

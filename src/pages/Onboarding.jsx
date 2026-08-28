@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y } from '../lib/constants'
-import { Bd, Check, KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { P, G, O, Y, orgPath } from '../lib/constants'
+import { Bd, Check, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 export const DEFAULT_TASKS = [
   '입사 오리엔테이션', '사내 시스템 교육', '부서 업무 소개', '보안 서약서 제출',
@@ -32,7 +32,7 @@ export default function Onboarding({ hideAdd = false }) {
   const load = async () => {
     const { data, error } = await supabase
       .from('onboarding')
-      .select('*, employees(name, dept, team, rank), onboarding_tasks(*)')
+      .select('*, employees(name, division, dept, team, locations, rank), onboarding_tasks(*)')
       .order('join_date', { ascending: false })
     if (error) { setError(error); return }
     setList((data || []).map(withDerived))
@@ -81,7 +81,7 @@ export default function Onboarding({ hideAdd = false }) {
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>신규 입사자</div>
           {list.length === 0 ? <EmptyState /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '소속', '직급', '입사일', 'D+', '멘토', '진행률', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <thead><tr>{['이름', '위치', '소속', '직급', '입사일', 'D+', '멘토', '진행률', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
               <tbody>
                 {list.map((o) => {
                   const e = o.employees || {}
@@ -91,7 +91,8 @@ export default function Onboarding({ hideAdd = false }) {
                       onMouseEnter={(ev) => { if (sel !== o.id) ev.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={(ev) => { if (sel !== o.id) ev.currentTarget.style.background = 'transparent' }}>
                       <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
-                      <td style={{ ...tdS, color: '#64748b' }}>{e.dept}</td>
+                      <td style={tdS}><LocationBadges locations={e.locations} /></td>
+                      <td style={{ ...tdS, color: '#64748b' }}>{orgPath(e)}</td>
                       <td style={tdS}>{e.rank}</td>
                       <td style={tdS}>{o.join_date}</td>
                       <td style={tdS}><Bd color={o.daysIn > 60 ? Y : P} bg={o.daysIn > 60 ? '#fef9c3' : '#f3e8ff'}>D+{o.daysIn}</Bd></td>
@@ -108,7 +109,10 @@ export default function Onboarding({ hideAdd = false }) {
         {s && (
           <div style={crd}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{s.employees?.name}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>{s.employees?.dept} · {s.employees?.rank} · 멘토: {s.mentor}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <LocationBadges locations={s.employees?.locations} />
+              <div style={{ fontSize: 12, color: '#64748b' }}>{orgPath(s.employees || {})} · {s.employees?.rank} · 멘토: {s.mentor}</div>
+            </div>
             <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{ flex: 1, background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>입사일</div><div style={{ fontSize: 14, fontWeight: 600 }}>{s.join_date}</div></div>
               <div style={{ flex: 1, background: '#f8fafc', borderRadius: 8, padding: 12 }}><div style={{ fontSize: 11, color: '#64748b' }}>진행률</div><div style={{ fontSize: 14, fontWeight: 600, color: P }}>{s.pct}%</div></div>
@@ -126,7 +130,7 @@ export default function Onboarding({ hideAdd = false }) {
 }
 
 function AddOnboardingModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', dept: '', team: '', rank: '', track: '사무', join_date: '', mentor: '' })
+  const [form, setForm] = useState({ name: '', division: '', dept: '', team: '', locations: [], rank: '', track: '사무', join_date: '', mentor: '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -140,8 +144,8 @@ function AddOnboardingModal({ onClose, onCreated }) {
     const { data: emp, error: e1 } = await supabase
       .from('employees')
       .insert({
-        name: form.name, dept: form.dept, team: form.team || null, rank: form.rank,
-        track: form.track, role: '팀원', level: 0, req_tenure: 0, threshold: 0, base_pts: 0,
+        name: form.name, division: form.division || null, dept: form.dept, team: form.team || null, locations: form.locations,
+        rank: form.rank, track: form.track, role: '팀원', level: 0, req_tenure: 0, threshold: 0, base_pts: 0,
       })
       .select()
       .single()
@@ -168,9 +172,12 @@ function AddOnboardingModal({ onClose, onCreated }) {
       <form onSubmit={submit}>
         <label style={lbl}>이름</label>
         <input style={field} required value={form.name} onChange={set('name')} />
+        <label style={lbl}>위치</label>
+        <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>부서</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>

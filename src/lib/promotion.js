@@ -103,7 +103,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   }
 
   return {
-    ...employee, evalPts: evalPtsSum, backfillPts, addPts, currentPts, gap,
+    ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0, addPts, currentPts, gap,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }

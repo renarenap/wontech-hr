@@ -80,6 +80,26 @@ export const DEPT_OPTIONS = [
   '해외CS파트', '해외법인영업파트', '해외영업팀', '청소미화',
 ]
 
+// ═══ 지역(위치) — "소속"(실-팀-파트) 앞에 붙는 상위 구분 ═══
+// 대전(원텍연구원)/판교(경영그룹)/해외법인 3개 축. 대전 소속인데 해외로 파견 나간 경우처럼
+// 한 사람이 2곳에 걸칠 수 있어서 다중 선택(배열, employees.locations text[])으로 저장합니다.
+// 조직개편으로 이름이 바뀔 수 있어서 하드코딩 최소화 — 화면에는 이 배열 순서 그대로 노출.
+export const LOCATIONS = ['대전', '판교', '해외법인']
+export const LOCATION_STYLE = {
+  대전: { c: B, bg: '#e0f2fe' },
+  판교: { c: P, bg: '#f3e8ff' },
+  해외법인: { c: G, bg: '#dcfce7' },
+}
+
+// ═══ 소속 3단계: 실 → 팀 → 파트 ═══
+// DB 컬럼명은 마이그레이션 비용 때문에 유지: division(실, 신규) / dept(팀, 기존 '소속') / team(파트, 기존 '팀')
+export const ORG_LEVEL_LABEL = { division: '실', dept: '팀', team: '파트' }
+
+// 실 · 팀 · 파트를 화면에 보여줄 때 쓰는 공용 결합 함수 (없는 단계는 건너뜀)
+export function orgPath(e) {
+  return [e?.division, e?.dept, e?.team].filter(Boolean).join(' · ')
+}
+
 // 직원 파생 필드 계산(deriveEmployee)은 rank_criteria 파라미터 테이블을 참조해야 해서
 // src/lib/promotion.js 로 옮겼습니다 (하드코딩된 직급 기준표 대신 DB 설정값 사용).
 
