@@ -29,7 +29,8 @@ export function evalCount(evaluations) {
 export function computeBackfill(level, R, rankCriteria, backfillFullTenure) {
   const rate = rankCriteria?.backfill_rate || 0
   if (!rate) return 0
-  const lvl = level || 0
+  // 연차가 음수로 잘못 입력돼도(오타 등) 백필 포인트가 마이너스로 깎여나가지 않게 0으로 방어
+  const lvl = Math.max(0, level || 0)
   if (backfillFullTenure) {
     return Math.round(lvl * rate * 10) / 10
   }

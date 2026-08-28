@@ -571,6 +571,15 @@ function ExportImportModal({ employees, onClose, onApplied }) {
   )
 }
 
+// 컬럼 헤더 문구가 바뀌어도(직군 라벨이 몇 번 수정됨) 예전에 받아둔 CSV를 그대로 올릴 수 있게
+// 여러 헤더 후보를 순서대로 찾아줌 — 앞의 것부터 우선
+function pickRaw(raw, ...keys) {
+  for (const k of keys) {
+    if (raw[k] !== undefined) return raw[k]
+  }
+  return ''
+}
+
 function buildPatch(raw) {
   const patch = {
     name: (raw['이름'] || '').trim(),
@@ -579,10 +588,18 @@ function buildPatch(raw) {
     dept: (raw['팀'] || '').trim(),
     team: (raw['파트'] || '').trim() || null,
     rank: (raw['직급'] || '').trim(),
-    // "임원"은 실제 DB엔 없는 값(임원 여부는 직급으로 자동 판단) — CSV에서만 편의상 받아주고 사무로 정규화
+    // "임원"은 실제 DB엔 없는 값(임원 여부는 직급으로 자동 판단) — CSV에서만 편의상 받아주고 사무로 정규화.
+    // "사무영어필수"는 예전 값(사무외국어필수로 개명됨) — 예전에 받아둔 CSV를 올려도 되게 자동 변환.
     track: (() => {
-      const t = (raw['직군(사무/사무외국어필수/연구/임원)'] || '').trim()
-      return t === '임원' ? '사무' : t
+      const t = pickRaw(
+        raw,
+        '직군(사무/사무외국어필수/연구/임원)',
+        '직군(사무/사무영어필수/연구/임원)',
+        '직군(사무/사무영어필수/연구)',
+      ).trim()
+      if (t === '임원') return '사무'
+      if (t === '사무영어필수') return '사무외국어필수'
+      return t
     })(),
     level: Number(raw['연차']) || 0,
     backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
