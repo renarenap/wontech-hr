@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R } from '../lib/constants'
+import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
 import { SB, Bd, LocationBadges, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
 
@@ -45,6 +45,7 @@ export default function EmployeeDetail() {
   const breakdown = [
     { l: '평가 포인트', v: emp.evalPts, c: O },
     { l: '경력인정 포인트', v: emp.backfillPts || 0, c: P },
+    { l: '휴직 포인트', v: emp.leavePts || 0, c: B },
     { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
     { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
   ]
@@ -77,7 +78,10 @@ export default function EmployeeDetail() {
           <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[emp.track] || emp.track}</div></div>
           {emp.hasCriteria ? (
             <>
-              <div><div style={fl}>체류연한</div><div style={fv}><TenureBar level={emp.level} reqTenure={emp.req_tenure} /></div></div>
+              <div>
+                <div style={fl}>체류연한{emp.leaveYears > 0 ? ` (근무 ${emp.level || 0}년 + 휴직 ${emp.leaveYears}년)` : ''}</div>
+                <div style={fv}><TenureBar level={emp.effectiveLevel} reqTenure={emp.req_tenure} /></div>
+              </div>
               <div><div style={fl}>진급 기준</div><div style={fv}>{emp.threshold}P</div></div>
             </>
           ) : (

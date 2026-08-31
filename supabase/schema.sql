@@ -24,6 +24,7 @@ create table if not exists employees (
   threshold int not null default 0,
   base_pts numeric default 0,   -- 레거시 필드, 더 이상 계산에 사용 안 함(경력직 백필로 대체)
   backfill_full_tenure boolean default false,  -- true면 연차 전체 × 기준점수로 백필(경력직), false면 평가공백만 백필
+  leave_years numeric default 0,  -- 휴직 연차: 평가 없이 1년당 6P 고정 가산 + 체류연한에도 합산
   eng_pts numeric default 0,
   eng_lifetime boolean default false,   -- 영어 AL/IH 평생인정 여부 (유효기간 만료돼도 승진요건 충족)
   eng2_pts numeric default 0,
@@ -120,8 +121,8 @@ create table if not exists employees_archive (
   name text not null,
   division text, dept text, team text, locations text[], rank text, track text, role text,
   level int, req_tenure int, threshold int,
-  base_pts numeric, backfill_full_tenure boolean, eng_pts numeric, eng_lifetime boolean,
-  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, award_pts numeric,
+  base_pts numeric, backfill_full_tenure boolean, leave_years numeric, eng_pts numeric, eng_lifetime boolean,
+  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, award_pts numeric, note text,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   transfer_ids uuid[],              -- 삭제 시점에 이 직원 소유였던 transfers.id 목록 (복구 시 재연결용)
   resign_date date not null,

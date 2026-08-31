@@ -21,6 +21,7 @@ const CSV_COLUMNS = [
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
+  { key: 'leave_years', label: '휴직연차(1년마다 6P 일괄, 체류연한에도 합산)' },
   { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
@@ -31,9 +32,9 @@ const CSV_COLUMNS = [
   { key: 'note', label: '비고(겸직 등 자유메모)' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
+const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
-const CSV_NUM_KEYS = new Set(['level', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
+const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
 const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, short: 3, na: 4 }
 // 상태 필터에서 고를 수 있는 항목 — 실제로 issues 배열에 담기는 값만(상태 컬럼에 뱃지로 뜨는 것과 동일)
@@ -363,7 +364,15 @@ export default function EmployeeList() {
                   </td>
                   <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
-                  <td style={tdS}><TenureBar level={e.level} reqTenure={e.req_tenure} /></td>
+                  <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
+                    {e.leaveYears > 0 ? (
+                      <Tip content={`근무 ${e.level || 0}년 + 휴직 ${e.leaveYears}년 = ${e.effectiveLevel}년`}>
+                        <TenureBar level={e.effectiveLevel} reqTenure={e.req_tenure} />
+                      </Tip>
+                    ) : (
+                      <TenureBar level={e.effectiveLevel} reqTenure={e.req_tenure} />
+                    )}
+                  </td>
                   <td style={{ ...tdS, color: e.backfillPts > 0 ? P : '#d1d5db' }} onClick={(ev) => ev.stopPropagation()}>
                     <Tip content={backfillDetail(e).tooltip}>{e.backfillPts || 0}P</Tip>
                   </td>
@@ -596,6 +605,7 @@ function buildPatch(raw) {
       return t
     })(),
     level: Number(raw['연차']) || 0,
+    leave_years: Number(pickByPrefix(raw, '휴직연차(')) || 0,
     backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
     eng_pts: Number(raw['영어점수']) || 0,
     eng_lifetime: /^(true|1|y|yes)$/i.test((raw['영어평생인정(TRUE/FALSE)'] || '').trim()),

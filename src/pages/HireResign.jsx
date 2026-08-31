@@ -55,6 +55,7 @@ async function resignEmployee(picked, lastDay) {
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, eng2_pts: picked.eng2_pts, cert_pts: picked.cert_pts, award_pts: picked.award_pts,
     eng_lifetime: picked.eng_lifetime, eng2_lifetime: picked.eng2_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
+    leave_years: picked.leave_years, note: picked.note,
     evaluations_snapshot: evals || [], transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
   })
   if (e2) throw new Error(e2.message)
@@ -79,6 +80,7 @@ async function restoreEmployee(archived) {
     track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure || 0, threshold: archived.threshold || 0,
     base_pts: archived.base_pts, eng_pts: archived.eng_pts, eng2_pts: archived.eng2_pts, cert_pts: archived.cert_pts, award_pts: archived.award_pts,
     eng_lifetime: archived.eng_lifetime, eng2_lifetime: archived.eng2_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
+    leave_years: archived.leave_years || 0, note: archived.note,
   }
   if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
 

@@ -73,12 +73,17 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
 
   const R = evalCount(evaluations)
   const backfillPts = hasCriteria ? computeBackfill(employee.level, R, rc, employee.backfill_full_tenure) : 0
+  // 휴직: 평가 없이 연차당 무조건 6P(직급 기준점수와 무관) + 체류연한에도 그대로 합산
+  // (경력직 백필과 별개 항목이라 겹쳐 계산되지 않음 — 평가공백 백필은 employee.level만 보고 계산됨)
+  const leaveYears = Math.max(0, employee.leave_years || 0)
+  const leavePts = Math.round(leaveYears * 6 * 10) / 10
+  const effectiveLevel = (employee.level || 0) + leaveYears
   // 가점(자격증·포상)만 포인트 합산에 들어감 — 영어/제2외국어는 별도 필수요건 필드로 분리(합산 제외)
   const addPts = (employee.cert_pts || 0) + (employee.award_pts || 0)
-  const currentPts = Math.round((evalPtsSum + backfillPts + addPts) * 10) / 10
+  const currentPts = Math.round((evalPtsSum + backfillPts + leavePts + addPts) * 10) / 10
 
   const gap = Math.max(0, threshold - currentPts)
-  const tenureMet = (employee.level || 0) >= req_tenure
+  const tenureMet = effectiveLevel >= req_tenure
   const ptsMet = currentPts >= threshold
   const engGated = isEngGateTrack(employee)
   const engOk = engGateMet(employee)
@@ -104,7 +109,8 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   }
 
   return {
-    ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0, addPts, currentPts, gap,
+    ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
+    leaveYears, leavePts, effectiveLevel, addPts, currentPts, gap,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }
