@@ -17,9 +17,9 @@ const ENG_GRADES = [
 
 // 체류연한/진급포인트는 "기준값 설정"(rank_criteria)에서 실시간으로 가져옵니다.
 // Fast Track 체류연한·기본P는 계산에는 안 쓰이는 참고용 수치라 여기서만 관리합니다.
-function RankTable({ title, subtitle, color, rows, criteriaMap, note }) {
+function RankTable({ id, title, subtitle, color, rows, criteriaMap, note }) {
   return (
-    <div style={crd}>
+    <div id={id} style={{ ...crd, scrollMarginTop: 16 }}>
       <div style={{ fontSize: 15, fontWeight: 700, color }}>{title}</div>
       {subtitle && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, marginBottom: 10 }}>{subtitle}</div>}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: subtitle ? 0 : 14 }}>
@@ -111,9 +111,38 @@ export default function Criteria() {
   if (error) return <ErrorBox error={error} />
   if (!criteriaMap) return <Loading />
 
+  const NAV = [
+    { id: 'sec-1', label: '① 평가등급 포인트' },
+    { id: 'sec-2', label: '② 인정포인트 산출방식' },
+    { id: 'sec-3', label: '③ 사무직(일반)' },
+    { id: 'sec-4', label: '④ 사무직(외국어필수)' },
+    { id: 'sec-5', label: '⑤ 연구직' },
+    { id: 'sec-6', label: '⑥ 가점' },
+    { id: 'sec-7', label: '⑦ 어학' },
+  ]
+
   return (
     <div>
-      <div style={crd}>
+      <div
+        style={{
+          display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16, padding: '10px 12px',
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 10, position: 'sticky', top: 0, zIndex: 5,
+        }}
+      >
+        {NAV.map((n) => (
+          <a
+            key={n.id} href={`#${n.id}`}
+            style={{
+              fontSize: 11, fontWeight: 600, color: '#64748b', textDecoration: 'none',
+              padding: '5px 10px', borderRadius: 20, background: '#f1f5f9', whiteSpace: 'nowrap',
+            }}
+          >
+            {n.label}
+          </a>
+        ))}
+      </div>
+
+      <div id="sec-1" style={{ ...crd, scrollMarginTop: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: O }}>① 평가등급별 포인트</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: 24 }}>
           <div>
@@ -155,8 +184,8 @@ export default function Criteria() {
         </div>
       </div>
 
-      <div style={crd}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#0284c7' }}>①-1 실제 평가 없이 포인트가 채워지는 3가지 경우</div>
+      <div id="sec-2" style={{ ...crd, scrollMarginTop: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#0284c7' }}>② 실제 평가 없이 포인트가 채워지는 3가지 경우</div>
         <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.8 }}>
           목록·상세 화면의 <b>"경력인정P"</b> 하나로 묶여서 보이지만, 실제로는 서로 다른 조건에서 계산되는 별개 항목이에요 — 헷갈리기 쉬워서 여기 정리해둡니다. 세 항목은 서로 중복 없이 각자 조건에서만 계산됩니다.
         </div>
@@ -166,7 +195,7 @@ export default function Criteria() {
             <tr>
               <td style={{ ...tdS, fontWeight: 700, color: P }}>경력직 인정포인트</td>
               <td style={tdS}>경력직 입사 등 이 회사에서 평가받은 이력이 아예 없는 사람 (CSV "경력직인정포인트 적용" = TRUE)</td>
-              <td style={tdS}>연차 × 직급별 기준점수 (아래 ②~④표 "인정포인트 기준")</td>
+              <td style={tdS}>연차 × 직급별 기준점수 (아래 ③~⑤표 "인정포인트 기준")</td>
             </tr>
             <tr>
               <td style={{ ...tdS, fontWeight: 700, color: '#0284c7' }}>평가 인정포인트</td>
@@ -182,27 +211,31 @@ export default function Criteria() {
         </table>
       </div>
 
+      {/* 아래 3개 표 색은 목록/상세 화면의 직군 뱃지 색과 맞춤(사무=회색, 외국어필수=파랑, 연구=보라) — 색만 보고도 어느 표인지 바로 알아보게 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <RankTable
-          title="② 사무직 (일반)" color={P} criteriaMap={criteriaMap}
+          id="sec-3"
+          title="③ 사무직 (일반)" color="#475569" criteriaMap={criteriaMap}
           rows={[['사원', 3, 24], ['대리', 3, 24], ['과장', 4, 30], ['차장', 4, 30], ['부장', 4, 30]]}
         />
         <RankTable
-          title="③ 사무직 (외국어필수)"
+          id="sec-4"
+          title="④ 사무직 (외국어필수)"
           subtitle="마케팅 · 미래전략 · 해외CS · 해외영업"
-          color={'#0284c7'} criteriaMap={criteriaMap}
+          color={B} criteriaMap={criteriaMap}
           rows={[['사원', 3, 24], ['대리', 3, 24], ['과장', 4, 33], ['차장', 4, 33], ['부장', 4, 33]]}
           note="* 과장·차장 승진 시 포인트·체류연한을 채워도 영어 또는 제2외국어 필수등급(3등급 · Im3) 이상이 아니면 '외국어 미충족'으로 표시됩니다."
         />
       </div>
 
       <RankTable
-        title="④ 연구직" color={B} criteriaMap={criteriaMap}
+        id="sec-5"
+        title="⑤ 연구직" color={P} criteriaMap={criteriaMap}
         rows={[['연구원', 3, 24], ['전임연구원', 3, 24], ['선임연구원', 5, 36], ['책임연구원', 6, 42], ['수석연구원', 3, 24]]}
       />
 
-      <div style={crd}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#14b8a6' }}>⑤ 가점 (자격증 · 기술성과 · 포상)</div>
+      <div id="sec-6" style={{ ...crd, scrollMarginTop: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#14b8a6' }}>⑥ 가점 (자격증 · 기술성과 · 포상)</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
@@ -228,8 +261,8 @@ export default function Criteria() {
         </div>
       </div>
 
-      <div style={crd}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑥ 어학 (별도 필수요건 — 가점 풀에 포함되지 않음)</div>
+      <div id="sec-7" style={{ ...crd, scrollMarginTop: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑦ 어학 (별도 필수요건 — 가점 풀에 포함되지 않음)</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
