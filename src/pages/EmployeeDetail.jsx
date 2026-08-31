@@ -66,9 +66,14 @@ export default function EmployeeDetail() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <LocationBadges locations={emp.locations} />
               <div style={{ fontSize: 12, color: '#64748b' }}>
-                {orgPath(emp)}{emp.role ? ` · ${emp.role}` : ''}
+                {orgPath(emp)}{emp.role ? ` · ${emp.role}` : ''}{emp.join_date ? ` · 입사 ${emp.join_date}` : ''}
               </div>
             </div>
+            {emp.leave_start_date && (
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                🌿 휴직 {emp.leave_start_date} ~ {emp.leave_end_date || '(진행중)'}
+              </div>
+            )}
             {emp.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>📝 {emp.note}</div>}
           </div>
           <SB status={emp.status} />

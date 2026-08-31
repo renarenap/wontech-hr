@@ -14,6 +14,7 @@ const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
 const CSV_COLUMNS = [
   { key: 'id', label: 'id' },
   { key: 'name', label: '이름' },
+  { key: 'join_date', label: '입사일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'locations', label: '위치(대전/판교/해외법인, 복수는 쉼표로 구분)' },
   { key: 'division', label: '실' },
   { key: 'dept', label: '팀' },
@@ -22,6 +23,8 @@ const CSV_COLUMNS = [
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
   { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영)' },
+  { key: 'leave_start_date', label: '휴직시작일(YYYYMMDD 또는 YYYY-MM-DD)' },
+  { key: 'leave_end_date', label: '휴직종료일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
@@ -32,7 +35,7 @@ const CSV_COLUMNS = [
   { key: 'note', label: '비고(겸직 등 자유메모)' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -590,9 +593,20 @@ function pickByPrefix(raw, prefix) {
   return key ? raw[key] : ''
 }
 
+// 날짜 입력을 여러 형식으로 받아줌 — "20251013"(구분자 없이), "2025-10-13", "2025/10/13", "2025.10.13"
+function normalizeDate(raw) {
+  const s = (raw || '').trim()
+  if (!s) return null
+  if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`
+  const m = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  return s
+}
+
 function buildPatch(raw) {
   const patch = {
     name: (raw['이름'] || '').trim(),
+    join_date: normalizeDate(pickByPrefix(raw, '입사일(')),
     // "대전"만 써도 "대전(원텍연구원)"으로 인식(라벨에 원텍연구원이 붙기 전에 이미 채워둔 값 보정용)
     locations: pickByPrefix(raw, '위치(').split(',').map((s) => s.trim()).filter(Boolean).map((s) => (s === '대전' ? '대전(원텍연구원)' : s)),
     division: (raw['실'] || '').trim() || null,
@@ -610,6 +624,8 @@ function buildPatch(raw) {
     level: Number(raw['연차']) || 0,
     // CSV엔 개월수로 입력받고(더 자연스러움), 저장은 지금처럼 연 단위 소수로(1년 3개월 등 소수 연차 그대로 지원)
     leave_years: (Number(pickByPrefix(raw, '휴직개월수(')) || 0) / 12,
+    leave_start_date: normalizeDate(pickByPrefix(raw, '휴직시작일(')),
+    leave_end_date: normalizeDate(pickByPrefix(raw, '휴직종료일(')),
     backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
     eng_pts: Number(raw['영어점수']) || 0,
     eng_lifetime: /^(true|1|y|yes)$/i.test((raw['영어평생인정(TRUE/FALSE)'] || '').trim()),
