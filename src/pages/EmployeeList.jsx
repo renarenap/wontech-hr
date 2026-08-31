@@ -212,7 +212,18 @@ export default function EmployeeList() {
   const [divF, setDivF] = useState('all')
   const [deptF, setDeptF] = useState('all')
   const [teamF, setTeamF] = useState('all')
-  const [statusF, setStatusF] = useState([]) // 다중선택 — 빈 배열이면 전체(상태 필터 없음)
+  // 상태 필터도 URL 쿼리에 저장 — 대시보드 KPI 카드에서 "필터링된 목록으로 바로가기" 링크를 걸 수 있게
+  const statusF = useMemo(() => {
+    const raw = searchParams.get('status')
+    return raw ? raw.split(',').filter(Boolean) : []
+  }, [searchParams])
+  const setStatusF = (arr) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (!arr || arr.length === 0) next.delete('status'); else next.set('status', arr.join(','))
+      return next
+    }, { replace: true })
+  }
   const [sortKey, setSortKey] = useState('currentPts')
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)

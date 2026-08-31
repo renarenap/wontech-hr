@@ -82,12 +82,12 @@ export default function Dashboard() {
     <div>
       <KpiRow
         items={[
-          { v: stats.total, l: '전체 인원', c: P },
-          { v: stats.possible, l: '승진 가능', c: G },
+          { v: stats.total, l: '전체 인원', c: P, onClick: () => navigate('/employees') },
+          { v: stats.possible, l: '승진 가능', c: G, onClick: () => navigate('/employees?status=possible') },
           { v: stats.ptShort + stats.tenureShort, l: '연차/P 부족', c: Y },
           { v: stats.engShort, l: '외국어 미충족', c: '#c026d3' },
           { v: stats.short, l: '미충족', c: R },
-          { v: stats.na, l: '해당없음(임원 등)', c: '#94a3b8' },
+          { v: stats.na, l: '해당없음(임원 등)', c: '#94a3b8', onClick: () => navigate('/employees?status=na') },
           { v: stats.avg, l: '평균 포인트', c: O },
         ]}
       />

@@ -94,11 +94,21 @@ export function Prog({ current, max, showLabel = true }) {
   )
 }
 
+// onClick이 있는 카드는 클릭 가능하게(커서·호버 테두리) — 대시보드 KPI에서 "필터링된 목록으로 이동" 용도로 씀
 export function KpiRow({ items }) {
   return (
     <div style={{ display: 'flex', gap: 14, marginBottom: 24, flexWrap: 'wrap' }}>
-      {items.map(({ v, l, c }) => (
-        <div key={l} style={{ flex: '1 1 130px', background: '#fff', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 22px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+      {items.map(({ v, l, c, onClick }) => (
+        <div
+          key={l}
+          onClick={onClick}
+          style={{
+            flex: '1 1 130px', background: '#fff', borderRadius: 12, border: '1px solid var(--border)', padding: '18px 22px',
+            boxShadow: '0 1px 3px rgba(0,0,0,.04)', cursor: onClick ? 'pointer' : 'default', transition: 'border-color .15s',
+          }}
+          onMouseEnter={onClick ? (ev) => { ev.currentTarget.style.borderColor = c } : undefined}
+          onMouseLeave={onClick ? (ev) => { ev.currentTarget.style.borderColor = 'var(--border)' } : undefined}
+        >
           <div style={{ fontSize: 28, fontWeight: 800, color: c, lineHeight: 1 }}>{v}</div>
           <div style={{ fontSize: 11, color: 'var(--text-sub)', marginTop: 5, fontWeight: 500 }}>{l}</div>
         </div>
