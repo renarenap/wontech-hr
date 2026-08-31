@@ -1,6 +1,6 @@
 // ═══ 승진포인트 계산 로직 (rank_criteria 파라미터 테이블 기반, 하드코딩 없음) ═══
 import { supabase } from '../supabaseClient'
-import { OFFICE_RANKS, RESEARCH_RANKS } from './constants'
+import { OFFICE_RANKS, RESEARCH_RANKS, sortByPeriod } from './constants'
 
 const TRACKED_RANKS = new Set([...OFFICE_RANKS, ...RESEARCH_RANKS])
 
@@ -28,6 +28,25 @@ export function evalCount(evaluations) {
     const isHalf = e.period?.endsWith('상') || e.period?.endsWith('하')
     return n + (isHalf ? 1 : 2)
   }, 0)
+}
+
+// 평가 포인트는 "현재 직급에서 최근 (연차-1)×2 반기치"만 반영 — 평가공백 백필의 예상치와 같은 기준(-1은
+// 진행 중인 최근 1년은 아직 평가 시즌이 안 지나서 빼는 것)이라, 승진할 때마다 이전 직급 평가가 계속
+// 누적돼서 다음 승진에 재사용되는 걸 막아줌. evaluations는 정렬 안 된 채로 들어와도 여기서 정렬함.
+export function recentEvalPoints(evaluations, level) {
+  const sorted = sortByPeriod(evaluations || [])
+  const maxUnits = Math.max(0, ((level || 0) - 1) * 2)
+  let unitsUsed = 0
+  let sum = 0
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const e = sorted[i]
+    const isHalf = e.period?.endsWith('상') || e.period?.endsWith('하')
+    const units = isHalf ? 1 : 2
+    if (unitsUsed + units > maxUnits) break
+    sum += Number(e.points || 0)
+    unitsUsed += units
+  }
+  return sum
 }
 
 // 경력직 인정포인트 / 평가 인정포인트 (화면엔 합쳐서 "경력인정P"로 표시)
@@ -72,7 +91,7 @@ export const CATEGORIES = [
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
 export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate = 6) {
-  const evalPtsSum = (evaluations || []).reduce((s, e) => s + Number(e.points || 0), 0)
+  const evalPtsSum = recentEvalPoints(evaluations, employee.level)
   const rc = rankCriteriaMap?.[employee.rank]
   const req_tenure = rc?.req_tenure || 0
   const threshold = rc?.threshold || 0

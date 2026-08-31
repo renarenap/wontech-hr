@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
-import { SB, Bd, LocationBadges, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
+import { SB, Bd, LocationBadges, Prog, TenureBar, Tip, crd, Loading, ErrorBox } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -44,7 +44,10 @@ export default function EmployeeDetail() {
   const fv = { fontSize: 14, fontWeight: 600 }
 
   const breakdown = [
-    { l: '평가 포인트', v: emp.evalPts, c: O },
+    {
+      l: '평가 포인트', v: emp.evalPts, c: O,
+      note: `현재 직급 기준 최근 ${Math.max(0, ((emp.level || 0) - 1) * 2)}건(반기 환산)만 반영 — 이전 직급 때 평가나 그 이전 기록은 승진 시 이미 반영된 것으로 보고 제외됩니다.`,
+    },
     { l: '경력인정 포인트', v: emp.backfillPts || 0, c: P },
     { l: '휴직 포인트', v: emp.leavePts || 0, c: B },
     { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
@@ -146,11 +149,11 @@ export default function EmployeeDetail() {
 
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>🏅 포인트 구성</div>
-          {breakdown.map(({ l, v, c }) => (
+          {breakdown.map(({ l, v, c, note }) => (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 4, background: c }} />
-                <span style={{ fontSize: 12, color: '#64748b' }}>{l}</span>
+                <span style={{ fontSize: 12, color: '#64748b' }}><Tip content={note}>{l}</Tip></span>
               </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: v > 0 ? c : '#d1d5db' }}>{v}P</span>
             </div>
