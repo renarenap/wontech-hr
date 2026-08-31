@@ -125,6 +125,12 @@ export default function EmployeeDetail() {
         )}
       </div>
 
+      {emp.leavePts > 0 && (
+        <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#854d0e', marginBottom: 16, lineHeight: 1.6 }}>
+          ⚠️ 이 총점(<b>{emp.currentPts}P</b>)에는 <b>휴직 포인트 {emp.leavePts}P</b>가 포함돼 있어요 — 휴직자 포인트 정책은 아직 확정되지 않았으니, 승진 여부를 최종 판단하실 땐 이 부분 감안해주세요.
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>📊 평가 이력</div>

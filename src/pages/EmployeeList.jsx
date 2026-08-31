@@ -394,7 +394,18 @@ export default function EmployeeList() {
                       {historyExpanded && <BackfillBadges employee={e} />}
                     </div>
                   </td>
-                  <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
+                  <td style={tdS}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Prog current={e.currentPts} max={e.threshold} />
+                      {e.leavePts > 0 && (
+                        <span onClick={(ev) => ev.stopPropagation()}>
+                          <Tip content={`휴직 포인트 ${e.leavePts}P 포함 — 정책 아직 미확정`}>
+                            <span style={{ fontSize: 12 }}>🌿</span>
+                          </Tip>
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td style={tdS}><span style={{ color: e.gap > 0 ? R : G, fontWeight: 600 }}>{e.gap > 0 ? `-${e.gap}P` : '충족'}</span></td>
                   <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
                     {e.leaveYears > 0 ? (

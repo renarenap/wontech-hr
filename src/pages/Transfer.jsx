@@ -88,6 +88,18 @@ export default function Transfer() {
   )
 }
 
+// 휴직시작일·종료일이 둘 다 있으면 그 사이 개월수를 계산(EmployeeList.jsx의 동일 함수와 같은 규칙)
+function monthsBetween(startStr, endStr) {
+  const s = startStr && startStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const e = endStr && endStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!s || !e) return null
+  const sy = Number(s[1]), sm = Number(s[2]), sd = Number(s[3])
+  const ey = Number(e[1]), em = Number(e[2]), ed = Number(e[3])
+  let months = (ey - sy) * 12 + (em - sm)
+  if (ed < sd) months -= 1
+  return Math.max(0, months)
+}
+
 function AddTransferModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     name: '', type: '부서이동', from_value: '', to_value: '', rank: '', effective_date: '', status: '승인대기',
@@ -135,8 +147,19 @@ function AddTransferModal({ onClose, onCreated }) {
       : form
     const { leave_start, leave_end, ...rest } = payload
     const { error } = await supabase.from('transfers').insert({ ...rest, employee_id: picked?.id || null })
+    if (error) { setSaving(false); setError(error.message); return }
+
+    // 휴직 발령이고 명단에 있는 직원이면, 발령 기록만 남기는 게 아니라 실제 직원 데이터(휴직 시작·종료일 +
+    // 계산 가능하면 휴직연차)에도 반영해서 포인트/체류연한에 바로 잡히게 함
+    if (form.type === '휴직' && picked?.id) {
+      const months = monthsBetween(form.leave_start, form.leave_end)
+      const empPatch = { leave_start_date: form.leave_start, leave_end_date: form.leave_end || null }
+      if (months !== null) empPatch.leave_years = months / 12
+      const { error: empErr } = await supabase.from('employees').update(empPatch).eq('id', picked.id)
+      if (empErr) { setSaving(false); setError(`발령은 등록됐지만 직원 정보 반영에 실패했어요: ${empErr.message}`); return }
+    }
+
     setSaving(false)
-    if (error) { setError(error.message); return }
     onCreated()
   }
 
