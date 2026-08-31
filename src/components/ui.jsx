@@ -121,10 +121,13 @@ export function Check({ done, label, onToggle }) {
   )
 }
 
+// d>0: D-day 남음(D-3), d===0: 당일(D-DAY), d<0: 이미 지남(D+3) — 예전엔 d<0일 때도 "D-3"로 나와서
+// "3일 남음"이랑 "3일 지남"이 똑같이 보이는 버그가 있었음
 export function DdayBd({ d }) {
+  const label = d === 0 ? 'D-DAY' : d > 0 ? `D-${d}` : `D+${-d}`
   return (
     <Bd color={d <= 0 ? R : d <= 7 ? Y : d <= 30 ? B : 'var(--text-sub)'} bg={d <= 0 ? '#fee2e2' : d <= 7 ? '#fef9c3' : d <= 30 ? '#e0f2fe' : '#f1f5f9'}>
-      {d <= 0 ? `D${d}` : `D-${d}`}
+      {label}
     </Bd>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, R, B, orgPath } from '../lib/constants'
+import { P, G, O, Y, R, B, DEPT_OPTIONS, orgPath } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const TYPE_CFG = {
@@ -58,7 +58,7 @@ export default function Transfer() {
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>발령 현황</div>
         {filtered.length === 0 ? <EmptyState /> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['이름', '유형', '변경 전', '→', '변경 후', '직급', '발령일', '결재자', '상태', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+            <thead><tr>{['이름', '유형', '변경 전', '→', '변경 후', '직급', '발령일', '상태', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
             <tbody>
               {filtered.map((t) => {
                 const tp = TYPE_CFG[t.type] || TYPE_CFG['부서이동']
@@ -74,7 +74,6 @@ export default function Transfer() {
                     <td style={{ ...tdS, fontWeight: 600, color: P }}>{t.to_value}</td>
                     <td style={tdS}>{t.rank}</td>
                     <td style={tdS}>{t.effective_date}</td>
-                    <td style={tdS}>{t.approver}</td>
                     <td style={tdS}><Bd color={st.c} bg={st.bg}>{t.status}</Bd></td>
                     <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={() => remove(t)}>삭제</button></td>
                   </tr>
@@ -90,9 +89,13 @@ export default function Transfer() {
 }
 
 function AddTransferModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', type: '부서이동', from_value: '', to_value: '', rank: '', effective_date: '', status: '승인대기', approver: '' })
+  const [form, setForm] = useState({
+    name: '', type: '부서이동', from_value: '', to_value: '', rank: '', effective_date: '', status: '승인대기',
+    leave_start: '', leave_end: '',
+  })
   const [employees, setEmployees] = useState([])
   const [picked, setPicked] = useState(null)
+  const [toDeptSel, setToDeptSel] = useState('') // 부서이동일 때 "변경 후" 선택값 — '' | '__custom__' | 실제 팀명
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -100,6 +103,12 @@ function AddTransferModal({ onClose, onCreated }) {
   useEffect(() => {
     supabase.from('employees').select('id, name, division, dept, team, locations, rank').order('name').then(({ data }) => setEmployees(data || []))
   }, [])
+
+  // 조직도 기준 팀 목록 + 실제 employees 데이터에 있는 팀을 합쳐서 "변경 후" 선택지로 씀
+  const deptOptions = useMemo(() => {
+    const live = employees.map((e) => e.dept).filter(Boolean)
+    return [...new Set([...DEPT_OPTIONS, ...live])].sort((a, b) => a.localeCompare(b, 'ko'))
+  }, [employees])
 
   const matches = useMemo(() => {
     if (picked || !form.name.trim()) return []
@@ -111,15 +120,21 @@ function AddTransferModal({ onClose, onCreated }) {
     setPicked(e)
     setForm((f) => ({
       ...f, name: e.name, rank: f.rank || e.rank,
-      from_value: f.from_value || `${orgPath(e)} / ${e.rank}`,
+      from_value: f.from_value || orgPath(e),
     }))
   }
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
+    if (form.type === '휴직' && !form.leave_start) { setError('휴직시작일을 입력해주세요.'); return }
     setSaving(true)
-    const { error } = await supabase.from('transfers').insert({ ...form, employee_id: picked?.id || null })
+    // 휴직 유형은 변경전/후 대신 휴직시작~종료일을 그대로 그 두 칸에 담음(스키마 변경 없이 재사용)
+    const payload = form.type === '휴직'
+      ? { ...form, from_value: form.leave_start, to_value: form.leave_end || '(진행중)' }
+      : form
+    const { leave_start, leave_end, ...rest } = payload
+    const { error } = await supabase.from('transfers').insert({ ...rest, employee_id: picked?.id || null })
     setSaving(false)
     if (error) { setError(error.message); return }
     onCreated()
@@ -169,13 +184,42 @@ function AddTransferModal({ onClose, onCreated }) {
           </div>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
         </div>
-        <label style={lbl}>변경 전</label>
-        <input style={field} required value={form.from_value} onChange={set('from_value')} placeholder="예: 글로벌영업팀 · 지역영업파트 / 과장" />
-        <label style={lbl}>변경 후</label>
-        <input style={field} required value={form.to_value} onChange={set('to_value')} placeholder="예: B2C사업부 · B2C사업팀 / 차장" />
+        {form.type === '휴직' ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}><label style={lbl}>휴직시작일</label><input style={field} type="date" required value={form.leave_start} onChange={set('leave_start')} /></div>
+            <div style={{ flex: 1 }}><label style={lbl}>휴직종료일 (미정이면 비워두세요)</label><input style={field} type="date" value={form.leave_end} onChange={set('leave_end')} /></div>
+          </div>
+        ) : (
+          <>
+            <label style={lbl}>변경 전</label>
+            <input style={field} required value={form.from_value} onChange={set('from_value')} placeholder="예: 글로벌영업팀 · 지역영업파트" />
+            <label style={lbl}>변경 후</label>
+            {form.type === '부서이동' ? (
+              <>
+                <select
+                  style={field} required
+                  value={toDeptSel || (deptOptions.includes(form.to_value) ? form.to_value : (form.to_value ? '__custom__' : ''))}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setToDeptSel(v)
+                    setForm({ ...form, to_value: v === '__custom__' ? '' : v })
+                  }}
+                >
+                  <option value="" disabled>팀을 선택하세요</option>
+                  {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+                  <option value="__custom__">+ 새 팀 직접 입력</option>
+                </select>
+                {(toDeptSel === '__custom__' || (!toDeptSel && form.to_value && !deptOptions.includes(form.to_value))) && (
+                  <input style={field} required placeholder="새 팀명" value={form.to_value} onChange={set('to_value')} />
+                )}
+              </>
+            ) : (
+              <input style={field} required value={form.to_value} onChange={set('to_value')} placeholder="예: B2C사업부 · B2C사업팀" />
+            )}
+          </>
+        )}
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}><label style={lbl}>발령일</label><input style={field} type="date" required value={form.effective_date} onChange={set('effective_date')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>결재자</label><input style={field} value={form.approver} onChange={set('approver')} /></div>
         </div>
         <label style={lbl}>상태</label>
         <select style={field} value={form.status} onChange={set('status')}>

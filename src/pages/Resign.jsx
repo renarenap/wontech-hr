@@ -24,7 +24,11 @@ export default function Resign({ hideAdd = false }) {
   const [showAdd, setShowAdd] = useState(false)
 
   const load = async () => {
-    const { data, error } = await supabase.from('resignations').select('*').order('last_day')
+    // 최종근무일이 한 달 넘게 지난 건은 여기(퇴사 현황)엔 안 보이고 "퇴사(삭제) 이력"에서만 확인 가능
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+    const { data, error } = await supabase.from('resignations').select('*').gte('last_day', cutoffStr).order('last_day')
     if (error) { setError(error); return }
     setList((data || []).map(withDerived))
   }
