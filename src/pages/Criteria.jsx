@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { GB, Tip, crd, thS, tdS, Loading, ErrorBox } from '../components/ui'
-import { O, B, P } from '../lib/constants'
+import { O, B, P, G } from '../lib/constants'
 import { fetchRankCriteria } from '../lib/promotion'
 
 // 참고: 등급 환산표는 회사 규정에 맞춰 수정하세요. 아래는 원안 구조를 유지한 예시 값입니다.
