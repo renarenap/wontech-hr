@@ -22,7 +22,7 @@ const CSV_COLUMNS = [
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
-  { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영)' },
+  { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
   { key: 'leave_start_date', label: '휴직시작일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'leave_end_date', label: '휴직종료일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
@@ -603,6 +603,18 @@ function normalizeDate(raw) {
   return s
 }
 
+// 휴직시작일·종료일이 둘 다 있으면 그 사이 개월수를 계산(종료일의 '일'이 시작일보다 앞이면 1개월 덜 채운 것으로 봄)
+function monthsBetween(startStr, endStr) {
+  const s = startStr && startStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const e = endStr && endStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!s || !e) return null
+  const sy = Number(s[1]), sm = Number(s[2]), sd = Number(s[3])
+  const ey = Number(e[1]), em = Number(e[2]), ed = Number(e[3])
+  let months = (ey - sy) * 12 + (em - sm)
+  if (ed < sd) months -= 1
+  return Math.max(0, months)
+}
+
 function buildPatch(raw) {
   const patch = {
     name: (raw['이름'] || '').trim(),
@@ -623,7 +635,14 @@ function buildPatch(raw) {
     })(),
     level: Number(raw['연차']) || 0,
     // CSV엔 개월수로 입력받고(더 자연스러움), 저장은 지금처럼 연 단위 소수로(1년 3개월 등 소수 연차 그대로 지원)
-    leave_years: (Number(pickByPrefix(raw, '휴직개월수(')) || 0) / 12,
+    // 휴직시작일·종료일이 둘 다 있으면 그걸로 개월수 자동 계산(우선), 없으면 휴직개월수 칸을 그대로 씀
+    leave_years: (() => {
+      const start = normalizeDate(pickByPrefix(raw, '휴직시작일('))
+      const end = normalizeDate(pickByPrefix(raw, '휴직종료일('))
+      const fromDates = monthsBetween(start, end)
+      const months = fromDates !== null ? fromDates : (Number(pickByPrefix(raw, '휴직개월수(')) || 0)
+      return months / 12
+    })(),
     leave_start_date: normalizeDate(pickByPrefix(raw, '휴직시작일(')),
     leave_end_date: normalizeDate(pickByPrefix(raw, '휴직종료일(')),
     backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
