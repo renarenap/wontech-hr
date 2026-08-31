@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
-import { SB, Bd, LocationBadges, Prog, TenureBar, Tip, crd, Loading, ErrorBox } from '../components/ui'
+import { SB, Bd, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -12,6 +12,8 @@ export default function EmployeeDetail() {
   const [history, setHistory] = useState([])
   const [error, setError] = useState(null)
   const [sim, setSim] = useState('GD')
+  const [showEdit, setShowEdit] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -32,7 +34,7 @@ export default function EmployeeDetail() {
     }
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
-  }, [id])
+  }, [id, refreshKey])
 
   if (error) return <ErrorBox error={error} />
   if (!emp) return <Loading />
@@ -56,12 +58,15 @@ export default function EmployeeDetail() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/employees')}
-        style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 16px', color: '#64748b', fontSize: 12, cursor: 'pointer' }}
-      >
-        ← 목록으로
-      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <button
+          onClick={() => navigate('/employees')}
+          style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 16px', color: '#64748b', fontSize: 12, cursor: 'pointer' }}
+        >
+          ← 목록으로
+        </button>
+        <button style={btnGhost} onClick={() => setShowEdit(true)}>✏️ 수정</button>
+      </div>
 
       <div style={{ ...crd, marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
@@ -198,6 +203,178 @@ export default function EmployeeDetail() {
         </div>
       </div>
       )}
+
+      {showEdit && (
+        <EditEmployeeModal
+          employee={emp}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); setRefreshKey((k) => k + 1) }}
+        />
+      )}
     </div>
   )
+}
+
+// ═══ 직원 정보 수정 — CSV 없이 이 화면에서 바로 고칠 수 있게 ═══
+function EditEmployeeModal({ employee, onClose, onSaved }) {
+  const e = employee
+  const [form, setForm] = useState({
+    name: e.name || '',
+    join_date: e.join_date || '',
+    locations: e.locations || [],
+    division: e.division || '',
+    dept: e.dept || '',
+    team: e.team || '',
+    rank: e.rank || '',
+    track: e.track || '사무',
+    level: e.level ?? 0,
+    leave_start_date: e.leave_start_date || '',
+    leave_end_date: e.leave_end_date || '',
+    leave_years: e.leave_years ?? 0,
+    backfill_full_tenure: !!e.backfill_full_tenure,
+    eng_pts: e.eng_pts ?? 0,
+    eng_lifetime: !!e.eng_lifetime,
+    eng2_pts: e.eng2_pts ?? 0,
+    eng2_lifetime: !!e.eng2_lifetime,
+    cert_pts: e.cert_pts ?? 0,
+    award_pts: e.award_pts ?? 0,
+    note: e.note || '',
+  })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set = (k) => (ev) => setForm({ ...form, [k]: ev.target.value })
+  const setChecked = (k) => (ev) => setForm({ ...form, [k]: ev.target.checked })
+
+  const submit = async (ev) => {
+    ev.preventDefault()
+    setError('')
+    if (!form.name.trim()) { setError('이름이 비어있어요'); return }
+    if (!form.division && !form.dept && !form.team) { setError('실/팀/파트 중 최소 하나는 있어야 해요'); return }
+    if (!form.rank.trim()) { setError('직급이 비어있어요'); return }
+    setSaving(true)
+    // 휴직시작·종료일이 둘 다 있으면 그걸로 휴직연차를 자동 계산(우선), 없으면 휴직연차 칸을 그대로 씀
+    const autoLeaveYears = monthsBetween(form.leave_start_date, form.leave_end_date)
+    const patch = {
+      name: form.name.trim(),
+      join_date: form.join_date || null,
+      locations: form.locations,
+      division: form.division.trim() || null,
+      dept: form.dept.trim() || null,
+      team: form.team.trim() || null,
+      rank: form.rank.trim(),
+      track: form.track,
+      level: Number(form.level) || 0,
+      leave_start_date: form.leave_start_date || null,
+      leave_end_date: form.leave_end_date || null,
+      leave_years: autoLeaveYears !== null ? autoLeaveYears / 12 : Number(form.leave_years) || 0,
+      backfill_full_tenure: form.backfill_full_tenure,
+      eng_pts: Number(form.eng_pts) || 0,
+      eng_lifetime: form.eng_lifetime,
+      eng2_pts: Number(form.eng2_pts) || 0,
+      eng2_lifetime: form.eng2_lifetime,
+      cert_pts: Number(form.cert_pts) || 0,
+      award_pts: Number(form.award_pts) || 0,
+      note: form.note.trim() || null,
+    }
+    const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
+    setSaving(false)
+    if (err) { setError(err.message); return }
+    onSaved()
+  }
+
+  return (
+    <Modal title={`${e.name} 정보 수정`} onClose={onClose} width={520}>
+      <form onSubmit={submit}>
+        <label style={lbl}>이름</label>
+        <input style={field} required value={form.name} onChange={set('name')} />
+
+        <label style={lbl}>입사일</label>
+        <input style={field} type="date" value={form.join_date} onChange={set('join_date')} />
+
+        <label style={lbl}>위치</label>
+        <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} required value={form.rank} onChange={set('rank')} /></div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>직군</label>
+            <select style={field} value={form.track} onChange={set('track')}>
+              {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1 }}><label style={lbl}>연차</label><input style={field} type="number" value={form.level} onChange={set('level')} /></div>
+        </div>
+
+        <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+          <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />
+          경력직 인정포인트 적용 (아니면 평가 인정포인트로 계산)
+        </label>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>휴직시작일</label><input style={field} type="date" value={form.leave_start_date} onChange={set('leave_start_date')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>휴직종료일</label><input style={field} type="date" value={form.leave_end_date} onChange={set('leave_end_date')} /></div>
+        </div>
+        {monthsBetween(form.leave_start_date, form.leave_end_date) === null && (
+          <div>
+            <label style={lbl}>휴직 연차 (시작·종료일 없을 때만 직접 입력, 예: 1.25 = 1년 3개월)</label>
+            <input style={field} type="number" step="0.01" value={form.leave_years} onChange={set('leave_years')} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>영어점수</label>
+            <input style={field} type="number" step="0.5" value={form.eng_pts} onChange={set('eng_pts')} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+              <input type="checkbox" checked={form.eng_lifetime} onChange={setChecked('eng_lifetime')} /> AL/IH 평생인정
+            </label>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>제2외국어점수</label>
+            <input style={field} type="number" step="0.5" value={form.eng2_pts} onChange={set('eng2_pts')} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
+              <input type="checkbox" checked={form.eng2_lifetime} onChange={setChecked('eng2_lifetime')} /> 평생인정
+            </label>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>자격가점</label><input style={field} type="number" step="0.5" value={form.cert_pts} onChange={set('cert_pts')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>포상가점</label><input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} /></div>
+        </div>
+
+        <label style={lbl}>비고 (겸직 등 자유메모)</label>
+        <input style={field} value={form.note} onChange={set('note')} />
+
+        {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button type="button" style={btnGhost} onClick={onClose}>취소</button>
+          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '저장 중…' : '저장'}</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+// 휴직시작일·종료일이 둘 다 있으면 개월수 계산(EmployeeList.jsx의 동일 함수와 같은 규칙), 아니면 null
+function monthsBetween(startStr, endStr) {
+  const s = startStr && startStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const en = endStr && endStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!s || !en) return null
+  const sy = Number(s[1]), sm = Number(s[2]), sd = Number(s[3])
+  const ey = Number(en[1]), em = Number(en[2]), ed = Number(en[3])
+  let months = (ey - sy) * 12 + (em - sm)
+  if (ed < sd) months -= 1
+  return Math.max(0, months)
 }
