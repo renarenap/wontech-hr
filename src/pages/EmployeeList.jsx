@@ -581,7 +581,8 @@ function pickByPrefix(raw, prefix) {
 function buildPatch(raw) {
   const patch = {
     name: (raw['이름'] || '').trim(),
-    locations: pickByPrefix(raw, '위치(').split(',').map((s) => s.trim()).filter(Boolean),
+    // "대전"만 써도 "대전(원텍연구원)"으로 인식(라벨에 원텍연구원이 붙기 전에 이미 채워둔 값 보정용)
+    locations: pickByPrefix(raw, '위치(').split(',').map((s) => s.trim()).filter(Boolean).map((s) => (s === '대전' ? '대전(원텍연구원)' : s)),
     division: (raw['실'] || '').trim() || null,
     dept: (raw['팀'] || '').trim() || null,
     team: (raw['파트'] || '').trim() || null,

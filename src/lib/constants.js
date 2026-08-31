@@ -97,9 +97,9 @@ export const DEPT_OPTIONS = [
 // 대전(원텍연구원)/판교(경영그룹)/해외법인 3개 축. 대전 소속인데 해외로 파견 나간 경우처럼
 // 한 사람이 2곳에 걸칠 수 있어서 다중 선택(배열, employees.locations text[])으로 저장합니다.
 // 조직개편으로 이름이 바뀔 수 있어서 하드코딩 최소화 — 화면에는 이 배열 순서 그대로 노출.
-export const LOCATIONS = ['대전', '판교', '해외법인']
+export const LOCATIONS = ['대전(원텍연구원)', '판교', '해외법인']
 export const LOCATION_STYLE = {
-  대전: { c: B, bg: '#e0f2fe' },
+  '대전(원텍연구원)': { c: B, bg: '#e0f2fe' },
   판교: { c: P, bg: '#f3e8ff' },
   해외법인: { c: G, bg: '#dcfce7' },
 }
