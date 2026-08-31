@@ -24,7 +24,7 @@ function RankTable({ title, subtitle, color, rows, criteriaMap, note }) {
       {subtitle && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3, marginBottom: 10 }}>{subtitle}</div>}
       <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: subtitle ? 0 : 14 }}>
         <thead>
-          <tr>{['직급', '체류연한', 'Fast Track', '기본P', '진급P'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
+          <tr>{['직급', '체류연한', 'Fast Track', '기본P', '진급P', '인정포인트 기준(연차당)'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map(([rank, fast, basePts]) => {
@@ -39,9 +39,10 @@ function RankTable({ title, subtitle, color, rows, criteriaMap, note }) {
                     <td style={tdS}>{fast}년</td>
                     <td style={tdS}>{basePts}P</td>
                     <td style={{ ...tdS, color: O, fontWeight: 700 }}>{rc.threshold}P</td>
+                    <td style={tdS}>{rc.backfill_rate || 0}P/연차</td>
                   </>
                 ) : (
-                  <td style={{ ...tdS, color: '#94a3b8' }} colSpan={4}>해당없음 — 별도 승진 기준을 두지 않는 직급</td>
+                  <td style={{ ...tdS, color: '#94a3b8' }} colSpan={5}>해당없음 — 별도 승진 기준을 두지 않는 직급</td>
                 )}
               </tr>
             )
@@ -152,12 +153,30 @@ export default function Criteria() {
       </div>
 
       <div style={crd}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#0284c7' }}>휴직 기간 처리</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#0284c7' }}>①-1 실제 평가 없이 포인트가 채워지는 3가지 경우</div>
         <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.8 }}>
-          휴직 기간엔 평가를 받지 않는다고 가정하고, 대신 <b>휴직 1개월당 0.5P(1년 기준 6P)를 직급과 무관하게 고정으로 가산</b>합니다 — 개월 단위로 정확히 계산되어 "1년 3개월" 같은 기간도 그대로 반영됩니다.
-          경력직 백필(경력인정P)과는 별개 항목이라 서로 중복 계산되지 않습니다.<br />
-          휴직 기간은 <b>체류연한(직급 승진에 필요한 연차) 충족 여부에도 그대로 합산</b>됩니다 — 휴직 중이어도 근속 자체는 인정된다는 뜻입니다.
+          목록·상세 화면의 <b>"경력인정P"</b> 하나로 묶여서 보이지만, 실제로는 서로 다른 조건에서 계산되는 별개 항목이에요 — 헷갈리기 쉬워서 여기 정리해둡니다. 세 항목은 서로 중복 없이 각자 조건에서만 계산됩니다.
         </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
+          <thead><tr>{['이름', '대상', '계산식'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <tbody>
+            <tr>
+              <td style={{ ...tdS, fontWeight: 700, color: P }}>경력직 인정포인트</td>
+              <td style={tdS}>경력직 입사 등 이 회사에서 평가받은 이력이 아예 없는 사람 (CSV "경력직인정포인트 적용" = TRUE)</td>
+              <td style={tdS}>연차 × 직급별 기준점수 (아래 ②~④표 "인정포인트 기준")</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdS, fontWeight: 700, color: '#0284c7' }}>평가 인정포인트</td>
+              <td style={tdS}>재직 중인데 평가 이력에 일부 공백이 있는 사람 (위 TRUE가 아닌 나머지 전원)</td>
+              <td style={tdS}>(예상평가건수 − 실제평가건수) × 기준점수 ÷ 2</td>
+            </tr>
+            <tr>
+              <td style={{ ...tdS, fontWeight: 700, color: G }}>휴직 포인트</td>
+              <td style={tdS}>휴직 기간이 있는 사람 (직급·기준점수와 무관)</td>
+              <td style={tdS}>휴직 개월수 × 0.5P (1년 기준 6P 고정) — 체류연한에도 그대로 합산됨</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

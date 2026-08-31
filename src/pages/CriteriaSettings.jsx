@@ -45,16 +45,25 @@ export default function CriteriaSettings() {
   return (
     <div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16, lineHeight: 1.6 }}>
-        직급별 체류연한·진급포인트·경력직 백필 기준점수(연차당)를 여기서 관리합니다. 코드에 하드코딩되어 있지 않고,
+        직급별 체류연한·진급포인트·인정포인트 기준점수(연차당)를 여기서 관리합니다. 코드에 하드코딩되어 있지 않고,
         이 화면에서 바꾸면 승진포인트 계산에 바로 반영돼요. 부장·수석연구원은 승진 기준을 정의하지 않기로 해서
         모두 0으로 비워두면 "해당없음"으로 표시됩니다.
+      </div>
+      <div style={{ ...crd, background: '#f8fafc' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>ⓘ 아래 "인정포인트 기준" 값이 쓰이는 곳</div>
+        <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.9 }}>
+          평가 없이 포인트가 채워지는 경우가 3가지 있는데, 화면엔 전부 "경력인정P"로 합쳐서 보여요 — 헷갈리지 않게 정리해둘게요.<br />
+          • <b>경력직 인정포인트</b> — 경력직 입사 등 평가 이력이 아예 없는 사람. <b>연차 × 아래 기준점수</b>를 통으로 인정 (직원 CSV의 "경력직인정포인트 적용"이 TRUE인 사람)<br />
+          • <b>평가 인정포인트</b> — 재직 중인데 평가 이력에 공백이 있는 사람(위 TRUE가 아닌 나머지 전원). <b>공백 반기 수 × 아래 기준점수 ÷ 2</b>로 계산<br />
+          • <b>휴직 포인트</b> — 휴직 기간이 있는 사람. <b>휴직 개월수 × 0.5P(1년 기준 6P)</b>로 고정 계산돼서, 아래 기준점수(직급별)와는 <u>무관</u>해요. 직원 CSV의 "휴직개월수"(또는 휴직시작·종료일)로 입력.
+        </div>
       </div>
       {notice && <div style={{ ...crd, borderColor: '#bbf7d0', background: '#f0fdf4', color: '#166534', fontSize: 12 }}>{notice}</div>}
       <div style={crd}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['직급', '체류연한(년)', '진급포인트(P)', '백필 기준점수(연차당, P)', ''].map((h) => <th key={h} style={thS}>{h}</th>)}
+              {['직급', '체류연한(년)', '진급포인트(P)', '인정포인트 기준(연차당, P)', ''].map((h) => <th key={h} style={thS}>{h}</th>)}
             </tr>
           </thead>
           <tbody>

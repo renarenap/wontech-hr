@@ -23,13 +23,13 @@ export function evalCount(evaluations) {
   }, 0)
 }
 
-// 경력직 백필 포인트
-// - backfillFullTenure(경력직, 평가이력 전무): 연차 전체 × 기준점수
-// - 일반(체류 중 일부 반기만 누락): (예상 반기 슬롯 - 실제 평가횟수) × 기준점수 / 2
+// 경력직 인정포인트 / 평가 인정포인트 (화면엔 합쳐서 "경력인정P"로 표시)
+// - backfillFullTenure=true → 경력직 인정포인트(경력직, 평가이력 전무): 연차 전체 × 기준점수
+// - backfillFullTenure=false → 평가 인정포인트(체류 중 일부 반기만 누락): (예상 반기 슬롯 - 실제 평가횟수) × 기준점수 / 2
 export function computeBackfill(level, R, rankCriteria, backfillFullTenure) {
   const rate = rankCriteria?.backfill_rate || 0
   if (!rate) return 0
-  // 연차가 음수로 잘못 입력돼도(오타 등) 백필 포인트가 마이너스로 깎여나가지 않게 0으로 방어
+  // 연차가 음수로 잘못 입력돼도(오타 등) 인정포인트가 마이너스로 깎여나가지 않게 0으로 방어
   const lvl = Math.max(0, level || 0)
   if (backfillFullTenure) {
     return Math.round(lvl * rate * 10) / 10
@@ -74,7 +74,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   const R = evalCount(evaluations)
   const backfillPts = hasCriteria ? computeBackfill(employee.level, R, rc, employee.backfill_full_tenure) : 0
   // 휴직: 평가 없이 연차당 무조건 6P(직급 기준점수와 무관) + 체류연한에도 그대로 합산
-  // (경력직 백필과 별개 항목이라 겹쳐 계산되지 않음 — 평가공백 백필은 employee.level만 보고 계산됨)
+  // (경력직/평가 인정포인트와 별개 항목이라 겹쳐 계산되지 않음 — computeBackfill은 employee.level만 보고 계산됨)
   const leaveYears = Math.max(0, employee.leave_years || 0)
   const leavePts = Math.round(leaveYears * 6 * 10) / 10
   const effectiveLevel = (employee.level || 0) + leaveYears

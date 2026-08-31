@@ -267,11 +267,11 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
-          경력직 백필 적용 (위 인정 연차 전체 × 직급 기준점수를 한 번에 기본포인트로 적용)
+          경력직 인정포인트 적용 (위 인정 연차 전체 × 직급 기준점수를 한 번에 기본포인트로 적용)
         </label>
         {backfillFullTenure && Number(level) === 0 && (
           <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
-            인정 연차가 0이면 백필 포인트도 0이 돼요 — 위에 연차를 입력해주세요.
+            인정 연차가 0이면 경력직 인정포인트도 0이 돼요 — 위에 연차를 입력해주세요.
           </div>
         )}
 

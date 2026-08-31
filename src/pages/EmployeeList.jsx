@@ -25,7 +25,7 @@ const CSV_COLUMNS = [
   { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
   { key: 'leave_start_date', label: '휴직시작일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'leave_end_date', label: '휴직종료일(YYYYMMDD 또는 YYYY-MM-DD)' },
-  { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
+  { key: 'backfill_full_tenure', label: '경력직인정포인트 적용(TRUE/FALSE, 아니면 평가인정포인트로 계산)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
   { key: 'eng2_pts', label: '제2외국어점수' },
@@ -44,22 +44,22 @@ const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2
 const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'na']
 
 // 경력인정P 산출 근거(툴팁 문구) + 평가이력에 점선 배지로 그릴 슬롯 수·등급색을 한 번에 계산
-// - count: 점선 배지 몇 개로 나타낼지(경력직 백필=연차 수, 평가공백 백필=공백 건수)
+// - count: 점선 배지 몇 개로 나타낼지(경력직 인정포인트=연차 수, 평가 인정포인트=공백 건수)
 // - grade: 슬롯 1개당 점수를 GRADE_HEIGHT에서 가장 가까운 등급으로 역매핑한 색상용 등급 문자
 function backfillDetail(e) {
   if (!e.backfillPts) return { count: 0, grade: null, tooltip: '경력인정 P 대상 아님' }
   const rate = e.backfillRate || 0
   const lvl = e.level || 0
   if (e.backfill_full_tenure) {
-    return { count: lvl, grade: nearestGrade(rate), tooltip: `${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P` }
+    return { count: lvl, grade: nearestGrade(rate), tooltip: `경력직 인정포인트 · ${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P` }
   }
-  // 경력직 백필이 아닌 경우엔 평가공백만큼만 경력인정됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
+  // 경력직 인정포인트가 아닌 경우엔 평가인정포인트로 계산됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
   const evaluated = evalCount(e.history)
   const expected = Math.max(0, (lvl - 1) * 2)
   const gapHalves = Math.max(0, expected - evaluated)
   return {
     count: gapHalves, grade: nearestGrade(rate / 2),
-    tooltip: `${e.rank} 경력인정P (평가공백분) · 예상평가 ${expected}건 − 실제 ${evaluated}건 = 공백 ${gapHalves}건 × ${rate}P÷2 = ${e.backfillPts}P`,
+    tooltip: `평가 인정포인트 · ${e.rank} 예상평가 ${expected}건 − 실제 ${evaluated}건 = 공백 ${gapHalves}건 × ${rate}P÷2 = ${e.backfillPts}P`,
   }
 }
 
@@ -645,7 +645,7 @@ function buildPatch(raw) {
     })(),
     leave_start_date: normalizeDate(pickByPrefix(raw, '휴직시작일(')),
     leave_end_date: normalizeDate(pickByPrefix(raw, '휴직종료일(')),
-    backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
+    backfill_full_tenure: /^(true|1|y|yes)$/i.test(pickByPrefix(raw, '경력직인정포인트').trim() || pickByPrefix(raw, '경력직백필').trim()),
     eng_pts: Number(raw['영어점수']) || 0,
     eng_lifetime: /^(true|1|y|yes)$/i.test((raw['영어평생인정(TRUE/FALSE)'] || '').trim()),
     eng2_pts: Number(raw['제2외국어점수']) || 0,
