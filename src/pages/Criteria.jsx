@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { GB, Tip, crd, thS, tdS, Loading, ErrorBox } from '../components/ui'
 import { O, B, P, G } from '../lib/constants'
-import { fetchRankCriteria } from '../lib/promotion'
+import { fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 
 // 참고: 등급 환산표는 회사 규정에 맞춰 수정하세요. 아래는 원안 구조를 유지한 예시 값입니다.
 const NEW_GRADES = [
@@ -99,10 +99,13 @@ const JPN_TIP = (
 
 export default function Criteria() {
   const [criteriaMap, setCriteriaMap] = useState(null)
+  const [leaveRate, setLeaveRate] = useState(6)
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetchRankCriteria().then(setCriteriaMap).catch(setError)
+    Promise.all([fetchRankCriteria(), fetchLeaveRate()])
+      .then(([cm, lr]) => { setCriteriaMap(cm); setLeaveRate(lr) })
+      .catch(setError)
   }, [])
 
   if (error) return <ErrorBox error={error} />
@@ -173,7 +176,7 @@ export default function Criteria() {
             <tr>
               <td style={{ ...tdS, fontWeight: 700, color: G }}>휴직 포인트</td>
               <td style={tdS}>휴직 기간이 있는 사람 (직급·기준점수와 무관)</td>
-              <td style={tdS}>휴직 개월수 × 0.5P (1년 기준 6P 고정) — 체류연한에도 그대로 합산됨</td>
+              <td style={tdS}>휴직 개월수 × {(leaveRate / 12).toFixed(2)}P (1년 기준 {leaveRate}P) — 체류연한에도 그대로 합산됨</td>
             </tr>
           </tbody>
         </table>

@@ -43,8 +43,16 @@ create table if not exists rank_criteria (
   rank text primary key,
   req_tenure int not null default 0,
   threshold int not null default 0,
-  backfill_rate numeric not null default 0,  -- 경력직 백필 기준점수(연차당)
+  backfill_rate numeric not null default 0,  -- 경력직/평가 인정포인트 기준점수(연차당)
   updated_at timestamptz default now()
+);
+
+-- 직급과 무관한 전역 설정값(싱글턴, id=1 고정) — 지금은 휴직 요율만 있음
+create table if not exists point_settings (
+  id int primary key default 1,
+  leave_rate_per_year numeric not null default 6,  -- 휴직 1년당 인정 포인트
+  updated_at timestamptz default now(),
+  constraint point_settings_single_row check (id = 1)
 );
 
 -- 평가 이력 (반기/연간 등급)
@@ -188,6 +196,11 @@ alter table resignations enable row level security;
 alter table transfers enable row level security;
 alter table recruit_positions enable row level security;
 alter table recruit_candidates enable row level security;
+
+-- point_settings는 싱글턴(id=1 고정)이라 insert/delete는 막고 select/update만 허용
+alter table point_settings enable row level security;
+create policy "authenticated_select_point_settings" on point_settings for select to authenticated using (true);
+create policy "authenticated_update_point_settings" on point_settings for update to authenticated using (true) with check (true);
 
 do $$
 declare

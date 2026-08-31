@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
-import { deriveEmployee, evalCount, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
+import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
@@ -22,7 +22,7 @@ const CSV_COLUMNS = [
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
-  { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
+  { key: 'leaveMonths', label: '휴직개월수(요율은 기준값 설정 참고, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
   { key: 'leave_start_date', label: '휴직시작일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'leave_end_date', label: '휴직종료일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'backfill_full_tenure', label: '경력직인정포인트 적용(TRUE/FALSE, 아니면 평가인정포인트로 계산)' },
@@ -196,10 +196,11 @@ export default function EmployeeList() {
     let cancelled = false
     async function load() {
       setError(null)
-      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria] = await Promise.all([
+      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('evaluations').select('employee_id, period, grade, points').order('period'),
         fetchRankCriteria(),
+        fetchLeaveRate(),
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
@@ -210,7 +211,7 @@ export default function EmployeeList() {
       })
       const list = (emps || []).map((e) => {
         const history = sortByPeriod(byEmp[e.id] || [])
-        return { ...deriveEmployee(e, history, rankCriteria), history }
+        return { ...deriveEmployee(e, history, rankCriteria, leaveRate), history }
       })
       setEmployees(list)
     }

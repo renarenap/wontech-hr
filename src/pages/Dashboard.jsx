@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { O, P, G, Y, R, B, TRACK_LABEL } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria, CATEGORIES } from '../lib/promotion'
+import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
 
 const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
@@ -18,10 +18,11 @@ export default function Dashboard() {
     let cancelled = false
     async function load() {
       setError(null)
-      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria] = await Promise.all([
+      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('evaluations').select('employee_id, period, points'),
         fetchRankCriteria(),
+        fetchLeaveRate(),
       ])
       if (cancelled) return
       if (e1 || e2) {
@@ -32,7 +33,7 @@ export default function Dashboard() {
       ;(evals || []).forEach((ev) => {
         ;(byEmp[ev.employee_id] ||= []).push(ev)
       })
-      setEmployees((emps || []).map((e) => deriveEmployee(e, byEmp[e.id] || [], rankCriteria)))
+      setEmployees((emps || []).map((e) => deriveEmployee(e, byEmp[e.id] || [], rankCriteria, leaveRate)))
     }
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }

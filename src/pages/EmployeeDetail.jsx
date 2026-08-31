@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria } from '../lib/promotion'
+import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { SB, Bd, LocationBadges, Prog, TenureBar, crd, Loading, ErrorBox } from '../components/ui'
 
 export default function EmployeeDetail() {
@@ -18,15 +18,16 @@ export default function EmployeeDetail() {
     async function load() {
       setError(null)
       setEmp(null)
-      const [{ data: e, error: e1 }, { data: evals, error: e2 }, rankCriteria] = await Promise.all([
+      const [{ data: e, error: e1 }, { data: evals, error: e2 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*').eq('id', id).single(),
         supabase.from('evaluations').select('*').eq('employee_id', id),
         fetchRankCriteria(),
+        fetchLeaveRate(),
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
       const hist = sortByPeriod(evals || [])
-      setEmp(deriveEmployee(e, hist, rankCriteria))
+      setEmp(deriveEmployee(e, hist, rankCriteria, leaveRate))
       setHistory(hist)
     }
     load().catch((err) => { if (!cancelled) setError(err) })

@@ -7,16 +7,22 @@ const ORDER = [...OFFICE_RANKS, ...RESEARCH_RANKS]
 
 export default function CriteriaSettings() {
   const [rows, setRows] = useState(null)
+  const [leaveRate, setLeaveRate] = useState(null) // 휴직 요율(연차당 P) — point_settings 싱글턴
   const [error, setError] = useState(null)
-  const [saving, setSaving] = useState(null) // rank being saved
+  const [saving, setSaving] = useState(null) // rank being saved, or 'leave'
   const [notice, setNotice] = useState('')
 
   const load = async () => {
     setError(null)
-    const { data, error: err } = await supabase.from('rank_criteria').select('*')
+    const [{ data, error: err }, { data: ps, error: err2 }] = await Promise.all([
+      supabase.from('rank_criteria').select('*'),
+      supabase.from('point_settings').select('leave_rate_per_year').eq('id', 1).maybeSingle(),
+    ])
     if (err) { setError(err); return }
+    if (err2) { setError(err2); return }
     const byRank = Object.fromEntries((data || []).map((r) => [r.rank, r]))
     setRows(ORDER.map((rank) => byRank[rank] || { rank, req_tenure: 0, threshold: 0, backfill_rate: 0 }))
+    setLeaveRate(Number(ps?.leave_rate_per_year) || 6)
   }
 
   useEffect(() => { load() }, [])
@@ -39,6 +45,15 @@ export default function CriteriaSettings() {
     setNotice(`${row.rank} 기준값이 저장됐어요.`)
   }
 
+  const saveLeaveRate = async () => {
+    setSaving('leave')
+    setNotice('')
+    const { error: err } = await supabase.from('point_settings').update({ leave_rate_per_year: Number(leaveRate) || 0 }).eq('id', 1)
+    setSaving(null)
+    if (err) { setError(err); return }
+    setNotice(`휴직 요율이 저장됐어요.`)
+  }
+
   if (error) return <ErrorBox error={error} />
   if (!rows) return <Loading />
 
@@ -55,10 +70,21 @@ export default function CriteriaSettings() {
           평가 없이 포인트가 채워지는 경우가 3가지 있는데, 화면엔 전부 "경력인정P"로 합쳐서 보여요 — 헷갈리지 않게 정리해둘게요.<br />
           • <b>경력직 인정포인트</b> — 경력직 입사 등 평가 이력이 아예 없는 사람. <b>연차 × 아래 기준점수</b>를 통으로 인정 (직원 CSV의 "경력직인정포인트 적용"이 TRUE인 사람)<br />
           • <b>평가 인정포인트</b> — 재직 중인데 평가 이력에 공백이 있는 사람(위 TRUE가 아닌 나머지 전원). <b>공백 반기 수 × 아래 기준점수 ÷ 2</b>로 계산<br />
-          • <b>휴직 포인트</b> — 휴직 기간이 있는 사람. <b>휴직 개월수 × 0.5P(1년 기준 6P)</b>로 고정 계산돼서, 아래 기준점수(직급별)와는 <u>무관</u>해요. 직원 CSV의 "휴직개월수"(또는 휴직시작·종료일)로 입력.
+          • <b>휴직 포인트</b> — 휴직 기간이 있는 사람. <b>휴직 개월수 × (아래 휴직 요율 ÷ 12)</b>로 고정 계산돼서, 아래 직급별 기준점수와는 <u>무관</u>해요. 직원 CSV의 "휴직개월수"(또는 휴직시작·종료일)로 입력.
         </div>
       </div>
       {notice && <div style={{ ...crd, borderColor: '#bbf7d0', background: '#f0fdf4', color: '#166534', fontSize: 12 }}>{notice}</div>}
+      <div style={crd}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>휴직 요율 (직급 무관, 전체 공통)</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>휴직 1년당</span>
+          <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.5" value={leaveRate} onChange={(e) => setLeaveRate(e.target.value)} />
+          <span style={{ fontSize: 12, color: '#64748b' }}>P (1개월당 {(Number(leaveRate) || 0) / 12}P로 자동 계산됨)</span>
+          <button style={{ ...btnPrimary, background: saving === 'leave' ? '#94a3b8' : G, padding: '6px 14px', marginLeft: 8 }} disabled={saving === 'leave'} onClick={saveLeaveRate}>
+            {saving === 'leave' ? '저장 중…' : '저장'}
+          </button>
+        </div>
+      </div>
       <div style={crd}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>

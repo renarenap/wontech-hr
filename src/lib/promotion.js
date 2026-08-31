@@ -15,6 +15,13 @@ export async function fetchRankCriteria() {
   return map
 }
 
+// point_settings(싱글턴)에서 휴직 요율(연차당 P)을 로드 — 실패하거나 행이 없으면 기존 하드코딩값(6)으로 대체
+export async function fetchLeaveRate() {
+  const { data, error } = await supabase.from('point_settings').select('leave_rate_per_year').eq('id', 1).maybeSingle()
+  if (error) throw error
+  return Number(data?.leave_rate_per_year) || 6
+}
+
 // 평가이력 개수(R) — 반기 평가는 1건, 연간(2026~) 평가는 반기 2건분으로 계산
 export function evalCount(evaluations) {
   return (evaluations || []).reduce((n, e) => {
@@ -64,7 +71,7 @@ export const CATEGORIES = [
 ]
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
-export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
+export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate = 6) {
   const evalPtsSum = (evaluations || []).reduce((s, e) => s + Number(e.points || 0), 0)
   const rc = rankCriteriaMap?.[employee.rank]
   const req_tenure = rc?.req_tenure || 0
@@ -76,7 +83,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
   // 휴직: 평가 없이 연차당 무조건 6P(직급 기준점수와 무관) + 체류연한에도 그대로 합산
   // (경력직/평가 인정포인트와 별개 항목이라 겹쳐 계산되지 않음 — computeBackfill은 employee.level만 보고 계산됨)
   const leaveYears = Math.max(0, employee.leave_years || 0)
-  const leavePts = Math.round(leaveYears * 6 * 10) / 10
+  const leavePts = Math.round(leaveYears * (leaveRate || 0) * 10) / 10
   const effectiveLevel = (employee.level || 0) + leaveYears
   // 가점(자격증·포상)만 포인트 합산에 들어감 — 영어/제2외국어는 별도 필수요건 필드로 분리(합산 제외)
   const addPts = (employee.cert_pts || 0) + (employee.award_pts || 0)
@@ -110,7 +117,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap) {
 
   return {
     ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
-    leaveYears, leavePts, effectiveLevel, addPts, currentPts, gap,
+    leaveYears, leavePts, leaveRate, effectiveLevel, addPts, currentPts, gap,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }
