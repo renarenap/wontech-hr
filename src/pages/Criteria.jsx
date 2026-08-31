@@ -178,7 +178,7 @@ export default function Criteria() {
               </tbody>
             </table>
             <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-              * AL·IH 등급은 한 번 취득 시 평생 인정. 승진포인트 합산에는 들어가지 않고, 사무직(외국어필수) 과장·차장 승진의 별도 필수요건(영어 또는 제2외국어)으로만 사용됩니다.
+              * AL·IH 등급은 한 번 취득 시 평생 인정. 승진포인트 합산에 포함되고, 동시에 사무직(외국어필수) 과장·차장 승진의 별도 필수요건(영어 또는 제2외국어)으로도 쓰입니다.
             </div>
           </div>
         </div>
@@ -262,7 +262,7 @@ export default function Criteria() {
       </div>
 
       <div id="sec-7" style={{ ...crd, scrollMarginTop: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑦ 어학 (별도 필수요건 — 가점 풀에 포함되지 않음)</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑦ 어학 (가점 풀에 포함 + 별도 필수요건 겸용)</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>
@@ -280,7 +280,7 @@ export default function Criteria() {
           </tbody>
         </table>
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 12, lineHeight: 1.6 }}>
-          * 영어·제2외국어 점수는 승진포인트 합계에 더해지지 않고, 사무직(외국어필수) 과장·차장 승진 시 필수요건(둘 중 하나라도 Im3 이상) 충족 여부만 판단하는 데 쓰입니다.<br />
+          * 영어·제2외국어 점수는 승진포인트 합계에 그대로 더해지고, 동시에 사무직(외국어필수) 과장·차장 승진 시 필수요건(둘 중 하나라도 Im3 이상) 충족 여부도 판단합니다.<br />
           * 제2외국어 고급/AL 등급은 영어 1등급과 동일하게 평생 인정됩니다.
         </div>
       </div>

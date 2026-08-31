@@ -51,13 +51,14 @@ export default function EmployeeDetail() {
     { l: '휴직 포인트', v: emp.leavePts || 0, c: B },
     { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
     { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
+    { l: '어학 가점 (영어+제2외국어)', v: (emp.eng_pts || 0) + (emp.eng2_pts || 0), c: '#0284c7' },
   ]
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <button
-          onClick={() => navigate('/employees')}
+          onClick={() => navigate(-1)}
           style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 16px', color: '#64748b', fontSize: 12, cursor: 'pointer' }}
         >
           ← 목록으로
@@ -101,7 +102,7 @@ export default function EmployeeDetail() {
         </div>
         {(emp.engGated || emp.eng_pts > 0 || emp.eng2_pts > 0) && (
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-            <div style={fl}>어학 (승진포인트 합계에는 포함되지 않는 별도 필수요건 필드)</div>
+            <div style={fl}>어학 (포인트 합계에 포함 + 사무직 외국어필수 과장·차장 필수요건 겸용)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>
                 영어 {emp.eng_pts || 0}P{emp.eng_lifetime ? ' · AL/IH 평생인정' : ''}

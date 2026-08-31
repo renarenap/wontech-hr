@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
@@ -197,7 +197,16 @@ export default function EmployeeList() {
   const [employees, setEmployees] = useState(null)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
-  const [trackF, setTrackF] = useState('all') // 'all' | CATEGORIES[].key
+  // 탭(직군)은 URL 쿼리에 저장 — 상세페이지 갔다가 뒤로가기로 돌아와도 고른 탭이 그대로 유지되게
+  const [searchParams, setSearchParams] = useSearchParams()
+  const trackF = searchParams.get('track') || 'all' // 'all' | CATEGORIES[].key
+  const setTrackF = (v) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (v === 'all') next.delete('track'); else next.set('track', v)
+      return next
+    }, { replace: true })
+  }
   const [rankF, setRankF] = useState('all')
   const [locF, setLocF] = useState('all')
   const [divF, setDivF] = useState('all')

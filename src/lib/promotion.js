@@ -111,8 +111,9 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const leaveYears = Math.max(0, employee.leave_years || 0)
   const leavePts = Math.round(leaveYears * (leaveRate || 0) * 10) / 10
   const effectiveLevel = (employee.level || 0) + leaveYears
-  // 가점(자격증·포상)만 포인트 합산에 들어감 — 영어/제2외국어는 별도 필수요건 필드로 분리(합산 제외)
-  const addPts = (employee.cert_pts || 0) + (employee.award_pts || 0)
+  // 가점(자격증·포상) + 어학(영어·제2외국어) 점수가 포인트 합산에 들어감.
+  // 어학은 그와 별개로 사무직(외국어필수) 과장·차장의 필수요건 충족 여부(engGated/engOk) 판단에도 계속 쓰임 — 둘이 겹쳐도 무방
+  const addPts = (employee.cert_pts || 0) + (employee.award_pts || 0) + (employee.eng_pts || 0) + (employee.eng2_pts || 0)
   const currentPts = Math.round((evalPtsSum + backfillPts + leavePts + addPts) * 10) / 10
 
   const gap = Math.max(0, threshold - currentPts)
