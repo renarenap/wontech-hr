@@ -21,7 +21,7 @@ const CSV_COLUMNS = [
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
-  { key: 'leave_years', label: '휴직연차(1년마다 6P 일괄, 체류연한에도 합산)' },
+  { key: 'leaveMonths', label: '휴직개월수(1개월당 0.5P, 체류연한에도 반영)' },
   { key: 'backfill_full_tenure', label: '경력직백필(TRUE/FALSE)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
@@ -414,7 +414,10 @@ function ExportImportModal({ employees, onClose, onApplied }) {
     const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h') + 'm'
     // 임원은 실제로는 track(사무/사무외국어필수/연구) 값과 무관하게 직급으로만 판단되지만,
     // CSV에서는 헷갈리지 않게 직급이 임원급이면 직군란도 "임원"으로 보여줌(업로드 시엔 다시 사무로 정규화됨)
-    const rows = employees.map((e) => (EXEC_RANKS.includes(e.rank) ? { ...e, track: '임원' } : e))
+    const rows = employees.map((e) => ({
+      ...(EXEC_RANKS.includes(e.rank) ? { ...e, track: '임원' } : e),
+      leaveMonths: Math.round((e.leave_years || 0) * 12), // 저장은 연 단위 소수, CSV엔 개월수로 보여줌
+    }))
     downloadCSV(`employees_${isBackup ? 'backup_' : ''}${stamp}.csv`, rows, CSV_COLUMNS)
   }
 
@@ -605,7 +608,8 @@ function buildPatch(raw) {
       return t
     })(),
     level: Number(raw['연차']) || 0,
-    leave_years: Number(pickByPrefix(raw, '휴직연차(')) || 0,
+    // CSV엔 개월수로 입력받고(더 자연스러움), 저장은 지금처럼 연 단위 소수로(1년 3개월 등 소수 연차 그대로 지원)
+    leave_years: (Number(pickByPrefix(raw, '휴직개월수(')) || 0) / 12,
     backfill_full_tenure: /^(true|1|y|yes)$/i.test((raw['경력직백필(TRUE/FALSE)'] || '').trim()),
     eng_pts: Number(raw['영어점수']) || 0,
     eng_lifetime: /^(true|1|y|yes)$/i.test((raw['영어평생인정(TRUE/FALSE)'] || '').trim()),

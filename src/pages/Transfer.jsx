@@ -5,6 +5,7 @@ import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, Empt
 
 const TYPE_CFG = {
   부서이동: { c: B, bg: '#e0f2fe' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
+  휴직: { c: Y, bg: '#fef9c3' },
 }
 const STATUS_CFG = { 승인완료: { c: G, bg: '#dcfce7' }, 승인대기: { c: Y, bg: '#fef9c3' }, 반려: { c: R, bg: '#fee2e2' } }
 
@@ -43,6 +44,7 @@ export default function Transfer() {
           <option value="부서이동">부서이동</option>
           <option value="파견">파견</option>
           <option value="직무변경">직무변경</option>
+          <option value="휴직">휴직</option>
         </select>
         <AddButton onClick={() => setShowAdd(true)}>+ 발령 추가</AddButton>
       </div>
@@ -162,7 +164,7 @@ function AddTransferModal({ onClose, onCreated }) {
           <div style={{ flex: 1 }}>
             <label style={lbl}>유형</label>
             <select style={field} value={form.type} onChange={set('type')}>
-              <option value="부서이동">부서이동</option><option value="승진">승진</option><option value="파견">파견</option><option value="직무변경">직무변경</option>
+              <option value="부서이동">부서이동</option><option value="승진">승진</option><option value="파견">파견</option><option value="직무변경">직무변경</option><option value="휴직">휴직</option>
             </select>
           </div>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
