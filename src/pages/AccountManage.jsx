@@ -245,7 +245,9 @@ function AddUserModal({ onClose, onCreated }) {
 }
 
 function ResetPasswordModal({ user, onClose, onDone }) {
-  const [password, setPassword] = useState(genPassword())
+  // 모달 열자마자 바로 새 비번이 생기면 "기존 비번 보러 들어왔다가 실수로 바꿔버리는" 상황이 생길 수 있어서,
+  // 버튼을 직접 눌러야만 생성되게 함 — 누르기 전까진 기존 비밀번호가 그대로 유지됨
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -266,14 +268,24 @@ function ResetPasswordModal({ user, onClose, onDone }) {
     <Modal title={`비밀번호 재설정 — ${user.email}`} onClose={onClose}>
       <form onSubmit={submit}>
         <label style={label}>새 비밀번호</label>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <input style={{ ...field, marginBottom: 0, fontFamily: 'monospace' }} value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button type="button" style={btnGhost} onClick={() => setPassword(genPassword())}>재생성</button>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input
+            style={{ ...field, marginBottom: 0, fontFamily: 'monospace' }} value={password}
+            onChange={(e) => setPassword(e.target.value)} placeholder="아래 버튼으로 생성하거나 직접 입력"
+          />
+          <button type="button" style={btnGhost} onClick={() => setPassword(genPassword())}>
+            {password ? '다시 생성' : '새 비밀번호 생성'}
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
+          {password
+            ? '⚠️ 적용을 누르는 순간 이 사람의 비밀번호가 실제로 바뀌어요 — 지금 여기 보이는 값을 꼭 복사해두세요, 닫으면 다시 못 봐요.'
+            : '버튼을 눌러야 실제로 비밀번호가 바뀌어요. 누르기 전까진 기존 비밀번호 그대로예요.'}
         </div>
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button type="button" style={btnGhost} onClick={onClose}>취소</button>
-          <button type="submit" style={btnPrimary} disabled={saving}>{saving ? '적용 중…' : '적용'}</button>
+          <button type="submit" style={btnPrimary} disabled={saving || !password}>{saving ? '적용 중…' : '적용'}</button>
         </div>
       </form>
     </Modal>
