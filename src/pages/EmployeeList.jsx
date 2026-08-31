@@ -362,7 +362,7 @@ export default function EmployeeList() {
                   <td style={tdS}><Bd color={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).c} bg={(TRACK_BADGE[e.track] || TRACK_BADGE.사무).bg}>{TRACK_LABEL[e.track] || e.track}</Bd></td>
                   <td style={{ ...tdS, whiteSpace: historyExpanded ? 'normal' : 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap' }}>
-                      {(historyExpanded ? e.history : e.history.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} />)}
+                      {(historyExpanded ? e.evalWindow : e.evalWindow.slice(-6)).map((h) => <GB key={h.period} grade={h.grade} dim={!h.counted} />)}
                       {historyExpanded && <BackfillBadges employee={e} />}
                     </div>
                   </td>

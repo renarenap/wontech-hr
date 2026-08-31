@@ -28,10 +28,20 @@ export function Bd({ children, color, bg }) {
 
 // 저장된 등급을 그대로 보여줌 — '23~'25 반기 기록은 S/A+/A/B+/B/C/D, '26년~ 기록은 EX/VG/GD/NI/UN
 // (연도별로 다른 체계를 썼던 걸 하나로 바꿔 보여주면 오히려 헷갈려서 변환 안 함)
-export function GB({ grade }) {
+// dim=true면 점선·반투명으로 — 지금 승진포인트 계산엔 반영 안 되는(현재 직급 반영범위 밖) 과거 평가라는 뜻
+export function GB({ grade, dim }) {
   const g = grade || '0'
+  const color = GRADE_COLOR[g] || '#cbd5e1'
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 22, borderRadius: 5, fontSize: 10, fontWeight: 700, color: '#fff', background: GRADE_COLOR[g] || '#cbd5e1', marginRight: 2 }}>
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 22, borderRadius: 5,
+        fontSize: 10, fontWeight: 700, marginRight: 2,
+        ...(dim
+          ? { color, background: `${color}1a`, border: `1px dashed ${color}` }
+          : { color: '#fff', background: color }),
+      }}
+    >
       {g}
     </span>
   )

@@ -33,20 +33,26 @@ export function evalCount(evaluations) {
 // 평가 포인트는 "현재 직급에서 최근 (연차-1)×2 반기치"만 반영 — 평가공백 백필의 예상치와 같은 기준(-1은
 // 진행 중인 최근 1년은 아직 평가 시즌이 안 지나서 빼는 것)이라, 승진할 때마다 이전 직급 평가가 계속
 // 누적돼서 다음 승진에 재사용되는 걸 막아줌. evaluations는 정렬 안 된 채로 들어와도 여기서 정렬함.
-export function recentEvalPoints(evaluations, level) {
+// 반환값 각 항목에 counted(포인트에 실제 반영됐는지)를 붙여서, 화면에서 반영 안 된 과거 평가를
+// 점선으로 구분해 보여줄 수 있게 함.
+export function markRecentEvals(evaluations, level) {
   const sorted = sortByPeriod(evaluations || [])
   const maxUnits = Math.max(0, ((level || 0) - 1) * 2)
   let unitsUsed = 0
-  let sum = 0
+  const countedIdx = new Set()
   for (let i = sorted.length - 1; i >= 0; i--) {
     const e = sorted[i]
     const isHalf = e.period?.endsWith('상') || e.period?.endsWith('하')
     const units = isHalf ? 1 : 2
     if (unitsUsed + units > maxUnits) break
-    sum += Number(e.points || 0)
+    countedIdx.add(i)
     unitsUsed += units
   }
-  return sum
+  return sorted.map((e, i) => ({ ...e, counted: countedIdx.has(i) }))
+}
+
+export function recentEvalPoints(evaluations, level) {
+  return markRecentEvals(evaluations, level).reduce((s, e) => (e.counted ? s + Number(e.points || 0) : s), 0)
 }
 
 // 경력직 인정포인트 / 평가 인정포인트 (화면엔 합쳐서 "경력인정P"로 표시)
@@ -91,7 +97,8 @@ export const CATEGORIES = [
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
 export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate = 6) {
-  const evalPtsSum = recentEvalPoints(evaluations, employee.level)
+  const evalWindow = markRecentEvals(evaluations, employee.level)
+  const evalPtsSum = evalWindow.reduce((s, e) => (e.counted ? s + Number(e.points || 0) : s), 0)
   const rc = rankCriteriaMap?.[employee.rank]
   const req_tenure = rc?.req_tenure || 0
   const threshold = rc?.threshold || 0
@@ -136,7 +143,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
 
   return {
     ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
-    leaveYears, leavePts, leaveRate, effectiveLevel, addPts, currentPts, gap,
+    leaveYears, leavePts, leaveRate, effectiveLevel, addPts, currentPts, gap, evalWindow,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }

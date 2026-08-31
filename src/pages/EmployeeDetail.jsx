@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { SB, Bd, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
@@ -9,7 +9,6 @@ export default function EmployeeDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [emp, setEmp] = useState(null)
-  const [history, setHistory] = useState([])
   const [error, setError] = useState(null)
   const [sim, setSim] = useState('GD')
   const [showEdit, setShowEdit] = useState(false)
@@ -28,9 +27,7 @@ export default function EmployeeDetail() {
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
-      const hist = sortByPeriod(evals || [])
-      setEmp(deriveEmployee(e, hist, rankCriteria, leaveRate))
-      setHistory(hist)
+      setEmp(deriveEmployee(e, evals || [], rankCriteria, leaveRate))
     }
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
@@ -130,21 +127,36 @@ export default function EmployeeDetail() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>📊 평가 이력</div>
-          {history.length === 0 ? (
+          {emp.evalWindow.length === 0 ? (
             <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>평가 이력이 없습니다</div>
           ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, padding: '0 8px', marginBottom: 10 }}>
-              {history.map((h) => {
-                const height = (GRADE_HEIGHT[h.grade] || 0) * 10
-                return (
-                  <div key={h.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: GRADE_COLOR[h.grade] || '#94a3b8' }}>{h.grade}</span>
-                    <div style={{ width: 32, height, borderRadius: 5, background: GRADE_COLOR[h.grade] || '#e2e8f0' }} />
-                    <span style={{ fontSize: 9, color: '#94a3b8' }}>{h.period}</span>
-                  </div>
-                )
-              })}
-            </div>
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, padding: '0 8px', marginBottom: 10 }}>
+                {emp.evalWindow.map((h) => {
+                  const height = (GRADE_HEIGHT[h.grade] || 0) * 10
+                  const color = GRADE_COLOR[h.grade] || '#e2e8f0'
+                  return (
+                    <div key={h.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: h.counted ? color : '#94a3b8' }}>{h.grade}</span>
+                      <div
+                        style={{
+                          width: 32, height, borderRadius: 5,
+                          ...(h.counted
+                            ? { background: color }
+                            : { background: `${color}1a`, border: `1px dashed ${color}` }),
+                        }}
+                      />
+                      <span style={{ fontSize: 9, color: '#94a3b8' }}>{h.period}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {emp.evalWindow.some((h) => !h.counted) && (
+                <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 10 }}>
+                  점선 = 이전 직급 때 평가 등, 지금 승진포인트 계산에는 반영되지 않음
+                </div>
+              )}
+            </>
           )}
           <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#64748b', fontSize: 12 }}>평가 포인트 합계</span>
