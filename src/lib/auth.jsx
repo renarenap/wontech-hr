@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   const value = {
     session,
     user: session?.user ?? null,
+    isAdmin: !!session?.user?.user_metadata?.is_admin,
     loading: session === undefined,
     signOut: () => supabase.auth.signOut(),
   }

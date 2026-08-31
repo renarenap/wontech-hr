@@ -6,6 +6,25 @@ import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIE
 import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
+// 전체 명단 CSV를 실제로 다운로드했을 때 관리자에게 알림(이메일) — 실패해도 다운로드 자체는 막지 않음
+async function notifyDownload(rowCount) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ rowCount }),
+    })
+  } catch {
+    // 알림 실패는 조용히 무시
+  }
+}
+
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무외국어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
 const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
 const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
@@ -423,6 +442,8 @@ function ExportImportModal({ employees, onClose, onApplied }) {
       leaveMonths: Math.round((e.leave_years || 0) * 12), // 저장은 연 단위 소수, CSV엔 개월수로 보여줌
     }))
     downloadCSV(`employees_${isBackup ? 'backup_' : ''}${stamp}.csv`, rows, CSV_COLUMNS)
+    // 자동 백업(모달 열자마자 한 번)은 알림 안 보냄 — 실제로 "다시 다운로드"를 눌렀을 때만
+    if (!isBackup) notifyDownload(rows.length)
   }
 
   // 모달을 열면 지금 상태를 자동으로 한 번 백업 다운로드 — 업로드해서 문제가 생겨도

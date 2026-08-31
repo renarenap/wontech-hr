@@ -197,17 +197,41 @@ alter table transfers enable row level security;
 alter table recruit_positions enable row level security;
 alter table recruit_candidates enable row level security;
 
--- point_settings는 싱글턴(id=1 고정)이라 insert/delete는 막고 select/update만 허용
+-- point_settings는 싱글턴(id=1 고정)이라 insert/delete는 막고 select/update만 허용(update는 관리자만)
 alter table point_settings enable row level security;
 create policy "authenticated_select_point_settings" on point_settings for select to authenticated using (true);
-create policy "authenticated_update_point_settings" on point_settings for update to authenticated using (true) with check (true);
+create policy "admin_update_point_settings" on point_settings for update to authenticated
+  using (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false))
+  with check (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
+
+-- rank_criteria: 조회는 전 직원 공개(기준표 화면용), 쓰기는 관리자만(user_metadata.is_admin)
+create policy "authenticated_select_rank_criteria" on rank_criteria for select to authenticated using (true);
+create policy "admin_insert_rank_criteria" on rank_criteria for insert to authenticated
+  with check (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
+create policy "admin_update_rank_criteria" on rank_criteria for update to authenticated
+  using (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false))
+  with check (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
+create policy "admin_delete_rank_criteria" on rank_criteria for delete to authenticated
+  using (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
+
+-- CSV 다운로드 알림용 로그 — 누구나 자기가 받은 걸 기록할 순 있지만(insert), 목록 조회는 관리자만
+create table if not exists csv_download_log (
+  id uuid primary key default gen_random_uuid(),
+  user_email text not null,
+  row_count int,
+  created_at timestamptz default now()
+);
+alter table csv_download_log enable row level security;
+create policy "authenticated_insert_csv_download_log" on csv_download_log for insert to authenticated with check (true);
+create policy "admin_select_csv_download_log" on csv_download_log for select to authenticated
+  using (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
 
 do $$
 declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','employees_archive','rank_criteria','evaluations','onboarding','onboarding_tasks',
+    'employees','employees_archive','evaluations','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop

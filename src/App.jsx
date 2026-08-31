@@ -36,6 +36,19 @@ function RedirectIfAuthed({ children }) {
   return children
 }
 
+function RequireAdmin({ children }) {
+  const { isAdmin, loading } = useAuth()
+  if (loading) return null
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+        🔒 관리자만 접근할 수 있는 화면이에요.
+      </div>
+    )
+  }
+  return children
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -78,7 +91,7 @@ export default function App() {
             <Route path="/employees" element={<EmployeeList />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
             <Route path="/criteria" element={<Criteria />} />
-            <Route path="/criteria-settings" element={<CriteriaSettings />} />
+            <Route path="/criteria-settings" element={<RequireAdmin><CriteriaSettings /></RequireAdmin>} />
             <Route path="/hire-resign" element={<HireResign />} />
             {/* 예전 주소 호환용 리다이렉트 */}
             <Route path="/hire" element={<Navigate to="/hire-resign" replace />} />
@@ -86,7 +99,7 @@ export default function App() {
             <Route path="/onboarding" element={<Navigate to="/hire-resign" replace />} />
             <Route path="/transfer" element={<Transfer />} />
             <Route path="/recruit" element={<Recruit />} />
-            <Route path="/accounts" element={<AccountManage />} />
+            <Route path="/accounts" element={<RequireAdmin><AccountManage /></RequireAdmin>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

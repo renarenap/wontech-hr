@@ -1,6 +1,7 @@
 // Edge Function: admin-users
-// 로그인한 사용자만 호출할 수 있으며, service role 권한으로 계정을 조회/생성/수정/삭제합니다.
-// service role 키는 이 함수 안에서만 쓰이고 브라우저(프론트엔드)에는 절대 노출되지 않습니다.
+// 관리자(user_metadata.is_admin === true) 계정만 호출할 수 있으며, service role 권한으로
+// 계정을 조회/생성/수정/삭제합니다. service role 키는 이 함수 안에서만 쓰이고 브라우저(프론트엔드)에는
+// 절대 노출되지 않습니다.
 //
 // 배포: supabase functions deploy admin-users
 // (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY는 Supabase가 자동으로 주입합니다)
@@ -31,6 +32,7 @@ function toUserRow(u: any) {
     dept: meta.dept || '',
     rank: meta.rank || '',
     role: meta.role || '부서원',
+    is_admin: !!meta.is_admin,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at,
   }
@@ -60,6 +62,10 @@ Deno.serve(async (req) => {
     const { data: callerData, error: callerErr } = await callerClient.auth.getUser()
     if (callerErr || !callerData?.user) {
       return json({ error: '로그인한 계정만 이용할 수 있습니다.' }, 401)
+    }
+    // 계정 관리(사용자 조회/생성/수정/삭제/비번재설정)는 관리자만 — user_metadata.is_admin
+    if (!callerData.user.user_metadata?.is_admin) {
+      return json({ error: '관리자만 이용할 수 있습니다.' }, 403)
     }
 
     const body = await req.json().catch(() => ({}))
@@ -103,8 +109,14 @@ Deno.serve(async (req) => {
     if (action === 'update') {
       const id = body.id
       if (!id) return json({ error: 'id가 필요합니다.' }, 400)
+      // user_metadata는 통째로 교체되는 값이라, is_admin처럼 이 화면이 모르는 필드까지
+      // 그대로 유지되게 기존 값 위에 덮어쓰는 형태로 병합함(안 그러면 아무 필드나 수정할 때마다
+      // is_admin이 조용히 날아감)
+      const { data: existing, error: getErr } = await adminClient.auth.admin.getUserById(id)
+      if (getErr) return json({ error: getErr.message }, 400)
       const { data, error } = await adminClient.auth.admin.updateUserById(id, {
         user_metadata: {
+          ...(existing.user.user_metadata || {}),
           name: body.name || '',
           dept: body.dept || '',
           rank: body.rank || '',

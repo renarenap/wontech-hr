@@ -13,8 +13,8 @@ const NAV = [
   { to: '/hire-resign', icon: '🔁', label: '입·퇴사 관리', g: '인사관리' },
   { to: '/transfer', icon: '🔀', label: '발령', g: '인사관리' },
   { to: '/recruit', icon: '📢', label: '채용현황', g: '채용' },
-  { to: '/criteria-settings', icon: '⚙️', label: '기준값 설정', g: '관리자' },
-  { to: '/accounts', icon: '🔑', label: '계정 관리', g: '관리자' },
+  { to: '/criteria-settings', icon: '⚙️', label: '기준값 설정', g: '관리자', adminOnly: true },
+  { to: '/accounts', icon: '🔑', label: '계정 관리', g: '관리자', adminOnly: true },
 ]
 
 const TITLES = {
@@ -96,10 +96,11 @@ function HeaderStats() {
 }
 
 export default function Layout() {
-  const { user, signOut } = useAuth()
+  const { user, isAdmin, signOut } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const groups = [...new Set(NAV.map((n) => n.g))]
+  const visibleNav = NAV.filter((n) => !n.adminOnly || isAdmin)
+  const groups = [...new Set(visibleNav.map((n) => n.g))]
   const initial = (user?.email || '?').charAt(0).toUpperCase()
 
   const handleSignOut = async () => {
@@ -122,7 +123,7 @@ export default function Layout() {
           {groups.map((g) => (
             <div key={g}>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', padding: '14px 14px 6px', letterSpacing: 1 }}>{g}</div>
-              {NAV.filter((n) => n.g === g).map((n) => (
+              {visibleNav.filter((n) => n.g === g).map((n) => (
                 <NavLink
                   key={n.to}
                   to={n.to}
