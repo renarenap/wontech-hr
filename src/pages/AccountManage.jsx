@@ -142,7 +142,7 @@ export default function AccountManage() {
                     <td style={tdS}>{u.rank || '—'}</td>
                     <td style={tdS}>
                       <select
-                        style={{ ...inp, padding: '5px 10px', cursor: 'pointer', color: (ROLE_COLOR[u.role] || ROLE_COLOR['팀원']).c }}
+                        style={{ ...inp, padding: '5px 10px', cursor: 'pointer', color: (ROLE_COLOR[u.role] || ROLE_COLOR['부서원']).c }}
                         value={u.role} disabled={busy}
                         onChange={(e) => changeRole(u, e.target.value)}
                       >
