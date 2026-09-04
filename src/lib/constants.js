@@ -122,5 +122,6 @@ export const STATUS_LABEL = {
   tenureShort: { label: '연차 부족', color: Y, bg: '#fef9c3' },
   engShort: { label: '외국어 미충족', color: '#c026d3', bg: '#fae8ff' },
   short: { label: '미충족', color: R, bg: '#fee2e2' },
+  onLeave: { label: '🌿 휴직중', color: '#0d9488', bg: '#ccfbf1' },
   na: { label: '해당없음', color: '#94a3b8', bg: '#f1f5f9' },
 }

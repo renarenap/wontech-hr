@@ -111,6 +111,10 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const leaveYears = Math.max(0, employee.leave_years || 0)
   const leavePts = Math.round(leaveYears * (leaveRate || 0) * 10) / 10
   const effectiveLevel = (employee.level || 0) + leaveYears
+  // 지금 시점에 실제로 휴직 중인지 — 시작일은 지났고, 종료일이 없거나(진행중) 아직 안 지났으면 휴직 중
+  const today = new Date().toISOString().slice(0, 10)
+  const onLeaveNow = !!employee.leave_start_date && employee.leave_start_date <= today
+    && (!employee.leave_end_date || employee.leave_end_date >= today)
   // 가점(자격증·포상) + 어학(영어·제2외국어) 점수가 포인트 합산에 들어감.
   // 어학은 그와 별개로 사무직(외국어필수) 과장·차장의 필수요건 충족 여부(engGated/engOk) 판단에도 계속 쓰임 — 둘이 겹쳐도 무방
   const addPts = (employee.cert_pts || 0) + (employee.award_pts || 0) + (employee.eng_pts || 0) + (employee.eng2_pts || 0)
@@ -123,8 +127,11 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const engOk = engGateMet(employee)
 
   // status: 대시보드 KPI처럼 "한 사람당 버킷 하나"가 필요한 곳에서 쓰는 대표 상태(우선순위 기반)
+  // 승진가능과 휴직중은 배타적 — 지금 실제로 휴직 중이면 포인트·연차가 기준을 넘겨도 "승진가능"이 아니라
+  // "휴직중"(일시정지)으로 봄. 복직하면(leave_end_date가 지나면) 그때부터 다시 정상 상태로 판정됨.
   let status
   if (!hasCriteria) status = 'na'
+  else if (onLeaveNow) status = 'onLeave'
   else if (ptsMet && tenureMet) status = (!engGated || engOk) ? 'possible' : 'engShort'
   else if (ptsMet && !tenureMet) status = 'tenureShort'
   else if (!ptsMet && tenureMet) status = 'ptShort'
@@ -133,18 +140,20 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   // issues: 실제로 걸려있는 미충족 사유를 전부 나열 — 연차·포인트·외국어가 동시에 부족할 수도 있어서
   // (목록 화면 상태 컬럼은 이 배열을 뱃지 여러 개로 보여줌)
   const issues = []
-  if (hasCriteria) {
+  if (!hasCriteria) {
+    issues.push('na')
+  } else if (onLeaveNow) {
+    issues.push('onLeave')
+  } else {
     if (!tenureMet) issues.push('tenureShort')
     if (!ptsMet) issues.push('ptShort')
     if (engGated && !engOk) issues.push('engShort')
     if (issues.length === 0) issues.push('possible')
-  } else {
-    issues.push('na')
   }
 
   return {
     ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
-    leaveYears, leavePts, leaveRate, effectiveLevel, addPts, currentPts, gap, evalWindow,
+    leaveYears, leavePts, leaveRate, effectiveLevel, onLeaveNow, addPts, currentPts, gap, evalWindow,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }

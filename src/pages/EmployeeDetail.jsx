@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
@@ -8,17 +8,18 @@ import { SB, Bd, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Load
 export default function EmployeeDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [emp, setEmp] = useState(null)
+  const [raw, setRaw] = useState(null) // { employee, evals, rankCriteria, leaveRate } — 원본 데이터, 휴직 반영 토글 시 다시 계산하는 데 씀
   const [error, setError] = useState(null)
   const [sim, setSim] = useState('GD')
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [includeLeave, setIncludeLeave] = useState(true) // false면 휴직기간 포인트·연차를 빼고 실제 근무 기록만으로 계산
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setError(null)
-      setEmp(null)
+      setRaw(null)
       const [{ data: e, error: e1 }, { data: evals, error: e2 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*').eq('id', id).single(),
         supabase.from('evaluations').select('*').eq('employee_id', id),
@@ -27,31 +28,41 @@ export default function EmployeeDetail() {
       ])
       if (cancelled) return
       if (e1 || e2) { setError(e1 || e2); return }
-      setEmp(deriveEmployee(e, evals || [], rankCriteria, leaveRate))
+      setRaw({ employee: e, evals: evals || [], rankCriteria, leaveRate })
     }
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
   }, [id, refreshKey])
 
+  // emp: 실제 저장된 값 그대로(휴직 포인트·연차 포함) — 수정 모달 초기값 등엔 항상 이걸 씀
+  const emp = useMemo(() => raw && deriveEmployee(raw.employee, raw.evals, raw.rankCriteria, raw.leaveRate), [raw])
+  // view: 화면에 실제로 보여줄 값 — "휴직기간 반영" 토글을 끄면 휴직연차를 0으로 놓고 다시 계산해서
+  // 실제 근무 경력연차·실제 평가결과만 딱 나오게 함(휴직중 여부 자체는 시작·종료일 기준이라 토글과 무관하게 그대로 유지됨)
+  const view = useMemo(() => {
+    if (!raw) return null
+    if (includeLeave) return emp
+    return deriveEmployee({ ...raw.employee, leave_years: 0 }, raw.evals, raw.rankCriteria, raw.leaveRate)
+  }, [raw, emp, includeLeave])
+
   if (error) return <ErrorBox error={error} />
-  if (!emp) return <Loading />
+  if (!view) return <Loading />
 
   const sp = SIM_GRADE_POINTS
-  const proj = emp.currentPts + (sp[sim] || 6)
-  const pg = Math.max(0, emp.threshold - proj)
+  const proj = view.currentPts + (sp[sim] || 6)
+  const pg = Math.max(0, view.threshold - proj)
   const fl = { fontSize: 11, color: '#64748b', marginBottom: 4 }
   const fv = { fontSize: 14, fontWeight: 600 }
 
   const breakdown = [
     {
-      l: '평가 포인트', v: emp.evalPts, c: O,
-      note: `현재 직급 기준 최근 ${Math.max(0, ((emp.level || 0) - 1) * 2)}건(반기 환산)만 반영 — 이전 직급 때 평가나 그 이전 기록은 승진 시 이미 반영된 것으로 보고 제외됩니다.`,
+      l: '평가 포인트', v: view.evalPts, c: O,
+      note: `현재 직급 기준 최근 ${Math.max(0, ((view.level || 0) - 1) * 2)}건(반기 환산)만 반영 — 이전 직급 때 평가나 그 이전 기록은 승진 시 이미 반영된 것으로 보고 제외됩니다.`,
     },
-    { l: '경력인정 포인트', v: emp.backfillPts || 0, c: P },
-    { l: '휴직 포인트', v: emp.leavePts || 0, c: B },
-    { l: '전문/직무 자격·기술성과 가점', v: emp.cert_pts || 0, c: '#6366f1' },
-    { l: '포상 가점', v: emp.award_pts || 0, c: '#ca8a04' },
-    { l: '어학 가점 (영어+제2외국어)', v: (emp.eng_pts || 0) + (emp.eng2_pts || 0), c: '#0284c7' },
+    { l: '경력인정 포인트', v: view.backfillPts || 0, c: P },
+    { l: '휴직 포인트', v: view.leavePts || 0, c: B },
+    { l: '전문/직무 자격·기술성과 가점', v: view.cert_pts || 0, c: '#6366f1' },
+    { l: '포상 가점', v: view.award_pts || 0, c: '#ca8a04' },
+    { l: '어학 가점 (영어+제2외국어)', v: (view.eng_pts || 0) + (view.eng2_pts || 0), c: '#0284c7' },
   ]
 
   return (
@@ -69,54 +80,60 @@ export default function EmployeeDetail() {
       <div style={{ ...crd, marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{emp.name}</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{view.name}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <LocationBadges locations={emp.locations} />
+              <LocationBadges locations={view.locations} />
               <div style={{ fontSize: 12, color: '#64748b' }}>
-                {orgPath(emp)}{emp.role ? ` · ${emp.role}` : ''}{emp.join_date ? ` · 입사 ${emp.join_date}` : ''}
+                {orgPath(view)}{view.role ? ` · ${view.role}` : ''}{view.join_date ? ` · 입사 ${view.join_date}` : ''}
               </div>
             </div>
-            {emp.leave_start_date && (
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                🌿 휴직 {emp.leave_start_date} ~ {emp.leave_end_date || '(진행중)'}
+            {view.leave_start_date && (
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span>🌿 휴직 {view.leave_start_date} ~ {view.leave_end_date || '(진행중)'}</span>
+                {emp.leaveYears > 0 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: '#64748b' }}>
+                    <input type="checkbox" checked={includeLeave} onChange={(ev) => setIncludeLeave(ev.target.checked)} />
+                    휴직기간 포인트·연차 반영
+                  </label>
+                )}
               </div>
             )}
-            {emp.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>📝 {emp.note}</div>}
+            {view.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>📝 {view.note}</div>}
           </div>
-          <SB status={emp.status} />
+          <SB status={view.status} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
-          <div><div style={fl}>직급</div><div style={fv}>{emp.rank}</div></div>
-          <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[emp.track] || emp.track}</div></div>
-          {emp.hasCriteria ? (
+          <div><div style={fl}>직급</div><div style={fv}>{view.rank}</div></div>
+          <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[view.track] || view.track}</div></div>
+          {view.hasCriteria ? (
             <>
               <div>
-                <div style={fl}>체류연한{emp.leaveYears > 0 ? ` (근무 ${emp.level || 0}년 + 휴직 ${emp.leaveYears}년)` : ''}</div>
-                <div style={fv}><TenureBar level={emp.effectiveLevel} reqTenure={emp.req_tenure} /></div>
+                <div style={fl}>체류연한{view.leaveYears > 0 ? ` (근무 ${view.level || 0}년 + 휴직 ${view.leaveYears}년)` : ''}</div>
+                <div style={fv}><TenureBar level={view.effectiveLevel} reqTenure={view.req_tenure} /></div>
               </div>
-              <div><div style={fl}>진급 기준</div><div style={fv}>{emp.threshold}P</div></div>
+              <div><div style={fl}>진급 기준</div><div style={fv}>{view.threshold}P</div></div>
             </>
           ) : (
             <div style={{ gridColumn: 'span 2' }}><div style={fl}>승진포인트 기준</div><div style={{ ...fv, color: '#94a3b8' }}>해당없음 (임원/부장/수석연구원은 별도 승진 기준을 두지 않음)</div></div>
           )}
         </div>
-        {(emp.engGated || emp.eng_pts > 0 || emp.eng2_pts > 0) && (
+        {(view.engGated || view.eng_pts > 0 || view.eng2_pts > 0) && (
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
             <div style={fl}>어학 (포인트 합계에 포함 + 사무직 외국어필수 과장·차장 필수요건 겸용)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>
-                영어 {emp.eng_pts || 0}P{emp.eng_lifetime ? ' · AL/IH 평생인정' : ''}
+                영어 {view.eng_pts || 0}P{view.eng_lifetime ? ' · AL/IH 평생인정' : ''}
               </span>
-              {emp.eng2_pts > 0 && (
+              {view.eng2_pts > 0 && (
                 <span style={{ fontSize: 12, color: '#64748b' }}>
-                  제2외국어 {emp.eng2_pts}P{emp.eng2_lifetime ? ' · 평생인정' : ''}
+                  제2외국어 {view.eng2_pts}P{view.eng2_lifetime ? ' · 평생인정' : ''}
                 </span>
               )}
-              {emp.engGated && (
+              {view.engGated && (
                 <>
                   <span style={{ fontSize: 12, color: '#94a3b8' }}>승진요건(Im3 이상):</span>
-                  <Bd color={emp.engOk ? G : '#c026d3'} bg={emp.engOk ? '#dcfce7' : '#fae8ff'}>
-                    {emp.engOk ? '✅ 충족' : '❌ 미충족'}
+                  <Bd color={view.engOk ? G : '#c026d3'} bg={view.engOk ? '#dcfce7' : '#fae8ff'}>
+                    {view.engOk ? '✅ 충족' : '❌ 미충족'}
                   </Bd>
                 </>
               )}
@@ -125,21 +142,34 @@ export default function EmployeeDetail() {
         )}
       </div>
 
-      {emp.leavePts > 0 && (
+      {!includeLeave && (
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1e40af', marginBottom: 16, lineHeight: 1.6 }}>
+          ℹ️ 지금은 휴직기간에 쌓인 포인트·연차를 빼고, <b>실제 근무 경력({view.level || 0}년)</b>과 <b>실제 평가 결과</b>만으로 계산한 값을 보고 있어요.
+        </div>
+      )}
+
+      {view.leavePts > 0 && (
         <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#854d0e', marginBottom: 16, lineHeight: 1.6 }}>
-          ⚠️ 이 총점(<b>{emp.currentPts}P</b>)에는 <b>휴직 포인트 {emp.leavePts}P</b>가 포함돼 있어요 — 휴직자 포인트 정책은 아직 확정되지 않았으니, 승진 여부를 최종 판단하실 땐 이 부분 감안해주세요.
+          ⚠️ 이 총점(<b>{view.currentPts}P</b>)에는 <b>휴직 포인트 {view.leavePts}P</b>가 포함돼 있어요 — 휴직자 포인트 정책은 아직 확정되지 않았으니, 승진 여부를 최종 판단하실 땐 이 부분 감안해주세요.
+        </div>
+      )}
+
+      {emp.eval_comment_2025 && (
+        <div style={crd}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>💬 2025년도 평가 코멘트</div>
+          <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>{emp.eval_comment_2025}</div>
         </div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>📊 평가 이력</div>
-          {emp.evalWindow.length === 0 ? (
+          {view.evalWindow.length === 0 ? (
             <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>평가 이력이 없습니다</div>
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: 120, padding: '0 8px', marginBottom: 10 }}>
-                {emp.evalWindow.map((h) => {
+                {view.evalWindow.map((h) => {
                   const height = (GRADE_HEIGHT[h.grade] || 0) * 10
                   const color = GRADE_COLOR[h.grade] || '#e2e8f0'
                   return (
@@ -158,7 +188,7 @@ export default function EmployeeDetail() {
                   )
                 })}
               </div>
-              {emp.evalWindow.some((h) => !h.counted) && (
+              {view.evalWindow.some((h) => !h.counted) && (
                 <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 10 }}>
                   점선 = 이전 직급 때 평가 등, 지금 승진포인트 계산에는 반영되지 않음
                 </div>
@@ -167,7 +197,7 @@ export default function EmployeeDetail() {
           )}
           <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#64748b', fontSize: 12 }}>평가 포인트 합계</span>
-            <span style={{ color: O, fontWeight: 700, fontSize: 14 }}>{emp.evalPts}P</span>
+            <span style={{ color: O, fontWeight: 700, fontSize: 14 }}>{view.evalPts}P</span>
           </div>
         </div>
 
@@ -184,17 +214,17 @@ export default function EmployeeDetail() {
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0 0' }}>
             <span style={{ fontSize: 14, fontWeight: 700 }}>총 승진포인트</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: O }}>{emp.currentPts}P</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: O }}>{view.currentPts}P</span>
           </div>
-          {emp.hasCriteria ? (
-            <div style={{ marginTop: 8 }}><Prog current={emp.currentPts} max={emp.threshold} /></div>
+          {view.hasCriteria ? (
+            <div style={{ marginTop: 8 }}><Prog current={view.currentPts} max={view.threshold} /></div>
           ) : (
             <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>승진포인트 추적 대상이 아니에요.</div>
           )}
         </div>
       </div>
 
-      {emp.hasCriteria && (
+      {view.hasCriteria && (
       <div style={crd}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>🔮 2026 시뮬레이션</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
@@ -211,7 +241,7 @@ export default function EmployeeDetail() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
           {[
             { l: '추가', v: `+${sp[sim]}P`, c: P },
-            { l: '예상 총', v: `${proj}P`, c: proj >= emp.threshold ? G : Y },
+            { l: '예상 총', v: `${proj}P`, c: proj >= view.threshold ? G : Y },
             { l: '잔여', v: pg > 0 ? `-${pg}P` : '✅ 충족', c: pg > 0 ? R : G },
           ].map(({ l, v, c }) => (
             <div key={l} style={{ background: '#f8fafc', borderRadius: 10, padding: 16, textAlign: 'center' }}>
@@ -258,6 +288,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     cert_pts: e.cert_pts ?? 0,
     award_pts: e.award_pts ?? 0,
     note: e.note || '',
+    eval_comment_2025: e.eval_comment_2025 || '',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -294,6 +325,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       cert_pts: Number(form.cert_pts) || 0,
       award_pts: Number(form.award_pts) || 0,
       note: form.note.trim() || null,
+      eval_comment_2025: form.eval_comment_2025.trim() || null,
     }
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
     setSaving(false)
@@ -375,6 +407,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
 
         <label style={lbl}>비고 (겸직 등 자유메모)</label>
         <input style={field} value={form.note} onChange={set('note')} />
+
+        <label style={lbl}>2025년도 평가 코멘트 (연간 통합, 정성적 코멘트)</label>
+        <textarea style={{ ...field, minHeight: 90, resize: 'vertical', fontFamily: 'inherit' }} value={form.eval_comment_2025} onChange={set('eval_comment_2025')} />
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>

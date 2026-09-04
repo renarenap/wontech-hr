@@ -49,15 +49,17 @@ export default function Dashboard() {
     const tenureShort = tracked.filter((e) => e.status === 'tenureShort').length
     const engShort = tracked.filter((e) => e.status === 'engShort').length
     const short = tracked.filter((e) => e.status === 'short').length
+    const onLeave = tracked.filter((e) => e.status === 'onLeave').length
     const avg = tracked.length ? (tracked.reduce((a, e) => a + e.currentPts, 0) / tracked.length).toFixed(1) : '0.0'
 
     const categoryCounts = Object.fromEntries(CATEGORIES.map((c) => [c.key, employees.filter(c.test).length]))
 
+    // 승진임박자에는 휴직중(일시정지)인 사람은 넣지 않음 — 승진가능과 배타적인 상태라 "곧 승진가능" 목록에도 안 맞음
     const imminent = tracked
-      .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible')
+      .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible' && e.status !== 'onLeave')
       .sort((a, b) => b.currentPts / b.threshold - a.currentPts / a.threshold)
 
-    return { total, na, possible, ptShort, tenureShort, engShort, short, avg, categoryCounts, imminent }
+    return { total, na, possible, ptShort, tenureShort, engShort, short, onLeave, avg, categoryCounts, imminent }
   }, [employees])
 
   const byRank = useMemo(() => {
@@ -84,6 +86,7 @@ export default function Dashboard() {
         items={[
           { v: stats.total, l: '전체 인원', c: P, onClick: () => navigate('/employees') },
           { v: stats.possible, l: '승진 가능', c: G, onClick: () => navigate('/employees?status=possible') },
+          { v: stats.onLeave, l: '휴직중', c: '#0d9488', onClick: () => navigate('/employees?status=onLeave') },
           { v: stats.ptShort + stats.tenureShort, l: '연차/P 부족', c: Y },
           { v: stats.engShort, l: '외국어 미충족', c: '#c026d3' },
           { v: stats.short, l: '미충족', c: R },

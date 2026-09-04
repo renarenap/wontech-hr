@@ -35,6 +35,7 @@ create table if not exists employees (
   cert_pts numeric default 0,
   award_pts numeric default 0,
   note text,                    -- 자유 메모(겸직 등) — CSV로만 편집, 화면엔 참고용으로만 표시
+  eval_comment_2025 text,       -- 2025년도 평가결과 코멘트(정성적, 연간 통합 1건) — 상세화면 직접입력 또는 CSV 업로드로 채움
   created_at timestamptz default now()
 );
 

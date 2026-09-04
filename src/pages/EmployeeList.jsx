@@ -52,15 +52,32 @@ const CSV_COLUMNS = [
   { key: 'cert_pts', label: '자격가점' },
   { key: 'award_pts', label: '포상가점' },
   { key: 'note', label: '비고(겸직 등 자유메모)' },
+  { key: 'eval_comment_2025', label: '2025 평가 코멘트' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note']
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note', 'eval_comment_2025']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
-const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, short: 3, na: 4 }
+const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, onLeave: 3, short: 4, na: 5 }
 // 상태 필터에서 고를 수 있는 항목 — 실제로 issues 배열에 담기는 값만(상태 컬럼에 뱃지로 뜨는 것과 동일)
-const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'na']
+const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'onLeave', 'na']
+// 선택 다운로드(승진후보 등 골라서 CSV로) 전용 컬럼 — 포인트현황 표에 보이는 값 그대로
+const SELECTION_CSV_COLUMNS = [
+  { key: 'name', label: '이름' },
+  { key: 'orgPathStr', label: '소속(실·팀·파트)' },
+  { key: 'rank', label: '직급' },
+  { key: 'trackLabel', label: '직군' },
+  { key: 'currentPts', label: '포인트' },
+  { key: 'threshold', label: '진급기준' },
+  { key: 'gapStr', label: '잔여' },
+  { key: 'effectiveLevel', label: '연차(체류연한)' },
+  { key: 'req_tenure', label: '요구연차' },
+  { key: 'backfillPts', label: '경력인정P' },
+  { key: 'statusLabel', label: '상태' },
+  { key: 'note', label: '비고' },
+  { key: 'eval_comment_2025', label: '2025 평가 코멘트' },
+]
 
 // 경력인정P 산출 근거(툴팁 문구) + 평가이력에 점선 배지로 그릴 슬롯 수·등급색을 한 번에 계산
 // - count: 점선 배지 몇 개로 나타낼지(경력직 인정포인트=연차 수, 평가 인정포인트=공백 건수)
@@ -117,7 +134,8 @@ function BackfillBadges({ employee }) {
   )
 }
 
-// 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/해당없음 중 여러 개를 동시에 켤 수 있음(OR 조건)
+// 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/휴직중/해당없음 중 여러 개를 동시에 켤 수 있음(AND 조건 —
+// 예: "포인트부족"+"외국어미충족" 두 개를 켜면 두 사유가 동시에 걸린 사람만 나옴. 한 사유만 걸린 사람까지 보려면 그 하나만 선택)
 // 컬럼 헤더에 붙는 펼치기/접기 토글(▸/▾) — 클릭 시 그 컬럼의 모든 행이 한꺼번에 펼쳐지거나 접힘.
 // 헤더가 정렬용 onClick을 이미 갖고 있을 수 있어(예: 소속) stopPropagation으로 분리.
 function HeaderExpandToggle({ expanded, onToggle }) {
@@ -230,6 +248,8 @@ export default function EmployeeList() {
   const [showExportImport, setShowExportImport] = useState(false)
   const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 실·팀·파트로 펼칠지(헤더 토글, 전체 행 공통)
   const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
+  const [selectedIds, setSelectedIds] = useState(() => new Set()) // 승진후보 등 골라서 CSV로 다운로드할 때 체크한 행
+  const [commentEmp, setCommentEmp] = useState(null) // 2025 평가 코멘트 상세를 볼 직원(모달)
 
   useEffect(() => {
     let cancelled = false
@@ -280,7 +300,7 @@ export default function EmployeeList() {
       if (divF !== 'all' && e.division !== divF) return false
       if (deptF !== 'all' && e.dept !== deptF) return false
       if (teamF !== 'all' && e.team !== teamF) return false
-      if (statusF.length > 0 && !e.issues.some((i) => statusF.includes(i))) return false
+      if (statusF.length > 0 && !statusF.every((f) => e.issues.includes(f))) return false
       return true
     })
     l.sort((a, b) => {
@@ -302,12 +322,52 @@ export default function EmployeeList() {
   }
   const ar = (k) => (sortKey === k ? (sortAsc ? ' ↑' : ' ↓') : '')
 
+  // 지금 화면에 보이는(필터링된) 행 기준으로 전체선택/해제 — 다른 탭·필터에 있는 행의 체크는 안 건드림
+  const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selectedIds.has(e.id))
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allFilteredSelected) filtered.forEach((e) => next.delete(e.id))
+      else filtered.forEach((e) => next.add(e.id))
+      return next
+    })
+  }
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const selectedList = filtered.filter((e) => selectedIds.has(e.id))
+  const downloadSelected = () => {
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h') + 'm'
+    const rows = selectedList.map((e) => ({
+      ...e,
+      orgPathStr: orgPath(e),
+      trackLabel: TRACK_LABEL[e.track] || e.track,
+      gapStr: e.gap > 0 ? `-${e.gap}P` : '충족',
+      statusLabel: (e.issues || []).map((i) => (STATUS_LABEL[i] || STATUS_LABEL.short).label).join(' / '),
+    }))
+    downloadCSV(`승진후보_선택다운로드_${stamp}.csv`, rows, SELECTION_CSV_COLUMNS)
+  }
+
   if (error) return <ErrorBox error={error} />
   if (!employees) return <Loading />
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+        {selectedIds.size > 0 && (
+          <button style={btnGhost} onClick={() => setSelectedIds(new Set())}>선택 해제 ({selectedIds.size})</button>
+        )}
+        <button
+          style={{ ...btnPrimary, opacity: selectedList.length === 0 ? 0.4 : 1, cursor: selectedList.length === 0 ? 'default' : 'pointer' }}
+          disabled={selectedList.length === 0}
+          onClick={downloadSelected}
+        >
+          ⬇ 선택 항목 다운로드 ({selectedList.length}명)
+        </button>
         <button style={btnGhost} onClick={() => setShowExportImport(true)}>📑 전체 데이터 다운로드 / 업로드</button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -365,6 +425,9 @@ export default function EmployeeList() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ ...thS, width: 34 }}>
+                  <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAllFiltered} title="현재 목록 전체 선택/해제" />
+                </th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('name')}>이름{ar('name')}</th>
                 <th style={thS}>위치</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('dept')}>
@@ -382,6 +445,7 @@ export default function EmployeeList() {
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>경력인정P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('status')}>상태{ar('status')}</th>
+                <th style={thS}>2025 평가</th>
                 <th style={thS}>비고</th>
               </tr>
             </thead>
@@ -392,6 +456,9 @@ export default function EmployeeList() {
                   onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
                   onMouseLeave={(ev) => (ev.currentTarget.style.background = 'transparent')}
                 >
+                  <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.has(e.id)} onChange={() => toggleSelect(e.id)} />
+                  </td>
                   <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
                   <td style={tdS}><LocationBadges locations={e.locations} /></td>
                   <td style={{ ...tdS, color: '#64748b' }}>
@@ -438,6 +505,19 @@ export default function EmployeeList() {
                       })}
                     </div>
                   </td>
+                  <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
+                    {e.eval_comment_2025 ? (
+                      <button
+                        type="button"
+                        onClick={() => setCommentEmp(e)}
+                        style={{ background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0d9488', borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        💬 있음
+                      </button>
+                    ) : (
+                      <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ ...tdS, color: '#94a3b8', whiteSpace: 'normal', maxWidth: 200 }}>{e.note || ''}</td>
                 </tr>
               ))}
@@ -445,6 +525,14 @@ export default function EmployeeList() {
           </table>
         )}
       </div>
+      {commentEmp && (
+        <Modal title={`${commentEmp.name} · 2025년도 평가 코멘트`} onClose={() => setCommentEmp(null)} width={480}>
+          <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>{commentEmp.eval_comment_2025}</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <button type="button" style={btnGhost} onClick={() => setCommentEmp(null)}>닫기</button>
+          </div>
+        </Modal>
+      )}
       {showExportImport && (
         <ExportImportModal
           employees={employees}
@@ -706,6 +794,7 @@ function buildPatch(raw) {
     cert_pts: Number(raw['자격가점']) || 0,
     award_pts: Number(raw['포상가점']) || 0,
     note: pickByPrefix(raw, '비고(').trim() || null,
+    eval_comment_2025: (raw['2025 평가 코멘트'] || '').trim() || null,
   }
   return patch
 }
