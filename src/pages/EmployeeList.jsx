@@ -134,8 +134,9 @@ function BackfillBadges({ employee }) {
   )
 }
 
-// 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/휴직중/해당없음 중 여러 개를 동시에 켤 수 있음(AND 조건 —
-// 예: "포인트부족"+"외국어미충족" 두 개를 켜면 두 사유가 동시에 걸린 사람만 나옴. 한 사유만 걸린 사람까지 보려면 그 하나만 선택)
+// 상태 다중선택 드롭다운 — 승진가능/연차부족/포인트부족/외국어미충족/휴직중/해당없음 중 여러 개를 동시에 켤 수 있음(정확히 일치 조건 —
+// 예: "포인트부족"+"외국어미충족" 두 개를 켜면 딱 그 두 사유만 걸린 사람만 나옴. 연차부족까지 추가로 걸린 사람은 빠짐 —
+// 그 사람까지 보려면 "연차부족"도 같이 켜야 함)
 // 컬럼 헤더에 붙는 펼치기/접기 토글(▸/▾) — 클릭 시 그 컬럼의 모든 행이 한꺼번에 펼쳐지거나 접힘.
 // 헤더가 정렬용 onClick을 이미 갖고 있을 수 있어(예: 소속) stopPropagation으로 분리.
 function HeaderExpandToggle({ expanded, onToggle }) {
@@ -300,7 +301,12 @@ export default function EmployeeList() {
       if (divF !== 'all' && e.division !== divF) return false
       if (deptF !== 'all' && e.dept !== deptF) return false
       if (teamF !== 'all' && e.team !== teamF) return false
-      if (statusF.length > 0 && !statusF.every((f) => e.issues.includes(f))) return false
+      if (statusF.length > 0) {
+        // 정확히 이 조합만 — 선택한 사유들 외에 다른 사유가 하나라도 더 걸려있으면 제외(개수·구성이 완전히 같아야 함)
+        const a = [...statusF].sort()
+        const b = [...e.issues].sort()
+        if (a.length !== b.length || a.some((v, i) => v !== b[i])) return false
+      }
       return true
     })
     l.sort((a, b) => {
