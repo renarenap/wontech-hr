@@ -26,6 +26,17 @@ export function Bd({ children, color, bg }) {
   )
 }
 
+// 비고 요약 배지 — +(긍정 특이사항)/−(근태 등 부정 특이사항)/o(특이사항 없음, 기본값)
+const NOTE_FLAG_STYLE = {
+  '+': { c: G, bg: '#dcfce7', label: '+' },
+  '-': { c: R, bg: '#fee2e2', label: '−' },
+  o: { c: '#94a3b8', bg: '#f1f5f9', label: 'o' },
+}
+export function NoteFlagBadge({ flag }) {
+  const s = NOTE_FLAG_STYLE[flag] || NOTE_FLAG_STYLE.o
+  return <Bd color={s.c} bg={s.bg}>{s.label}</Bd>
+}
+
 // 저장된 등급을 그대로 보여줌 — '23~'25 반기 기록은 S/A+/A/B+/B/C/D, '26년~ 기록은 EX/VG/GD/NI/UN
 // (연도별로 다른 체계를 썼던 걸 하나로 바꿔 보여주면 오히려 헷갈려서 변환 안 함)
 // dim=true면 점선·반투명으로 — 지금 승진포인트 계산엔 반영 안 되는(현재 직급 반영범위 밖) 과거 평가라는 뜻

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
-import { Bd, GB, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
+import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
 // 전체 명단 CSV를 실제로 다운로드했을 때 관리자에게 알림(이메일) — 실패해도 다운로드 자체는 막지 않음
@@ -51,11 +51,11 @@ const CSV_COLUMNS = [
   { key: 'eng2_lifetime', label: '제2외국어평생인정(TRUE/FALSE)' },
   { key: 'cert_pts', label: '자격가점' },
   { key: 'award_pts', label: '포상가점' },
-  { key: 'note', label: '비고(겸직 등 자유메모)' },
-  { key: 'eval_comment_2025', label: '2025 평가 코멘트' },
+  { key: 'note_flag', label: '비고평가(+/-/o, 기본 o)' },
+  { key: 'note', label: '비고(근태 등 특이사항 상세)' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note', 'eval_comment_2025']
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note_flag', 'note']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -75,8 +75,9 @@ const SELECTION_CSV_COLUMNS = [
   { key: 'req_tenure', label: '요구연차' },
   { key: 'backfillPts', label: '경력인정P' },
   { key: 'statusLabel', label: '상태' },
-  { key: 'note', label: '비고' },
-  { key: 'eval_comment_2025', label: '2025 평가 코멘트' },
+  { key: 'note_flag', label: '비고평가(+/-/o)' },
+  { key: 'note', label: '비고 상세' },
+  { key: 'latestCommentStr', label: '정성평가 최근 코멘트' },
 ]
 
 // 경력인정P 산출 근거(툴팁 문구) + 평가이력에 점선 배지로 그릴 슬롯 수·등급색을 한 번에 계산
@@ -250,28 +251,34 @@ export default function EmployeeList() {
   const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 실·팀·파트로 펼칠지(헤더 토글, 전체 행 공통)
   const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
   const [selectedIds, setSelectedIds] = useState(() => new Set()) // 승진후보 등 골라서 CSV로 다운로드할 때 체크한 행
-  const [commentEmp, setCommentEmp] = useState(null) // 2025 평가 코멘트 상세를 볼 직원(모달)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setError(null)
-      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, rankCriteria, leaveRate] = await Promise.all([
+      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, { data: comments, error: e3 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('evaluations').select('employee_id, period, grade, points').order('period'),
+        supabase.from('eval_comments').select('employee_id, comment_date, text').order('comment_date', { ascending: false }),
         fetchRankCriteria(),
         fetchLeaveRate(),
       ])
       if (cancelled) return
-      if (e1 || e2) { setError(e1 || e2); return }
+      if (e1 || e2 || e3) { setError(e1 || e2 || e3); return }
       const byEmp = {}
       ;(evals || []).forEach((ev) => {
         if (!byEmp[ev.employee_id]) byEmp[ev.employee_id] = []
         byEmp[ev.employee_id].push(ev)
       })
+      const commentsByEmp = {}
+      ;(comments || []).forEach((c) => {
+        if (!commentsByEmp[c.employee_id]) commentsByEmp[c.employee_id] = []
+        commentsByEmp[c.employee_id].push(c)
+      })
       const list = (emps || []).map((e) => {
         const history = sortByPeriod(byEmp[e.id] || [])
-        return { ...deriveEmployee(e, history, rankCriteria, leaveRate), history }
+        const empComments = commentsByEmp[e.id] || [] // 이미 comment_date 내림차순으로 불러왔으니 [0]이 최신
+        return { ...deriveEmployee(e, history, rankCriteria, leaveRate), history, comments: empComments }
       })
       setEmployees(list)
     }
@@ -354,6 +361,7 @@ export default function EmployeeList() {
       trackLabel: TRACK_LABEL[e.track] || e.track,
       gapStr: e.gap > 0 ? `-${e.gap}P` : '충족',
       statusLabel: (e.issues || []).map((i) => (STATUS_LABEL[i] || STATUS_LABEL.short).label).join(' / '),
+      latestCommentStr: e.comments?.[0] ? `${e.comments[0].comment_date}: ${e.comments[0].text}` : '',
     }))
     downloadCSV(`승진후보_선택다운로드_${stamp}.csv`, rows, SELECTION_CSV_COLUMNS)
   }
@@ -451,7 +459,7 @@ export default function EmployeeList() {
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('level')}>연차{ar('level')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('backfillPts')}>경력인정P{ar('backfillPts')}</th>
                 <th style={{ ...thS, cursor: 'pointer' }} onClick={() => hs('status')}>상태{ar('status')}</th>
-                <th style={thS}>2025 평가</th>
+                <th style={thS}>정성평가</th>
                 <th style={thS}>비고</th>
               </tr>
             </thead>
@@ -512,33 +520,27 @@ export default function EmployeeList() {
                     </div>
                   </td>
                   <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
-                    {e.eval_comment_2025 ? (
-                      <button
-                        type="button"
-                        onClick={() => setCommentEmp(e)}
-                        style={{ background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0d9488', borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        💬 있음
-                      </button>
+                    {e.comments?.length > 0 ? (
+                      <Tip content={`최근: ${e.comments[0].comment_date} — ${e.comments[0].text}${e.comments.length > 1 ? `\n(총 ${e.comments.length}건, 상세화면에서 전체 확인)` : ''}`}>
+                        <span style={{ background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0d9488', borderRadius: 6, padding: '3px 9px', fontSize: 11, fontWeight: 600 }}>
+                          💬 {e.comments.length}건
+                        </span>
+                      </Tip>
                     ) : (
                       <span style={{ color: '#d1d5db', fontSize: 11 }}>—</span>
                     )}
                   </td>
-                  <td style={{ ...tdS, color: '#94a3b8', whiteSpace: 'normal', maxWidth: 200 }}>{e.note || ''}</td>
+                  <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
+                    <Tip content={e.note || '기재된 특이사항 없음'}>
+                      <span><NoteFlagBadge flag={e.note_flag} /></span>
+                    </Tip>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
-      {commentEmp && (
-        <Modal title={`${commentEmp.name} · 2025년도 평가 코멘트`} onClose={() => setCommentEmp(null)} width={480}>
-          <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>{commentEmp.eval_comment_2025}</div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-            <button type="button" style={btnGhost} onClick={() => setCommentEmp(null)}>닫기</button>
-          </div>
-        </Modal>
-      )}
       {showExportImport && (
         <ExportImportModal
           employees={employees}
@@ -799,8 +801,11 @@ function buildPatch(raw) {
     eng2_lifetime: /^(true|1|y|yes)$/i.test((raw['제2외국어평생인정(TRUE/FALSE)'] || '').trim()),
     cert_pts: Number(raw['자격가점']) || 0,
     award_pts: Number(raw['포상가점']) || 0,
-    note: pickByPrefix(raw, '비고(').trim() || null,
-    eval_comment_2025: (raw['2025 평가 코멘트'] || '').trim() || null,
+    note_flag: (() => {
+      const v = pickByPrefix(raw, '비고평가(').trim()
+      return ['+', '-', 'o'].includes(v) ? v : 'o'
+    })(),
+    note: pickByPrefix(raw, '비고(근태').trim() || null,
   }
   return patch
 }
@@ -811,5 +816,6 @@ function validatePatch(patch) {
   if (!patch.division && !patch.dept && !patch.team) errs.push('실/팀/파트 중 최소 하나는 있어야 해요')
   if (!patch.rank) errs.push('직급이 비어있어요')
   if (!TRACKS.some((t) => t.value === patch.track)) errs.push(`직군 값이 이상해요: "${patch.track}" (사무/사무외국어필수/연구 중 하나여야 해요)`)
+  if (!['+', '-', 'o'].includes(patch.note_flag)) errs.push(`비고평가 값이 이상해요: "${patch.note_flag}" (+/-/o 중 하나여야 해요)`)
   return errs
 }

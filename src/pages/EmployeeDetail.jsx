@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
-import { SB, Bd, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
+import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
+import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -14,6 +15,8 @@ export default function EmployeeDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [includeLeave, setIncludeLeave] = useState(true) // false면 휴직기간 포인트·연차를 빼고 실제 근무 기록만으로 계산
+  const [comments, setComments] = useState(null) // 정성평가 코멘트 이력(시계열) — employees 테이블과 별개로 따로 로드·갱신
+  const [commentsError, setCommentsError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -33,6 +36,11 @@ export default function EmployeeDetail() {
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
   }, [id, refreshKey])
+
+  const reloadComments = () => {
+    fetchEvalComments(id).then(setComments).catch((err) => setCommentsError(err))
+  }
+  useEffect(() => { reloadComments() }, [id])
 
   // emp: 실제 저장된 값 그대로(휴직 포인트·연차 포함) — 수정 모달 초기값 등엔 항상 이걸 씀
   const emp = useMemo(() => raw && deriveEmployee(raw.employee, raw.evals, raw.rankCriteria, raw.leaveRate), [raw])
@@ -98,7 +106,11 @@ export default function EmployeeDetail() {
                 )}
               </div>
             )}
-            {view.note && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>📝 {view.note}</div>}
+            {(view.note || view.note_flag !== 'o') && (
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <NoteFlagBadge flag={view.note_flag} /> {view.note}
+              </div>
+            )}
           </div>
           <SB status={view.status} />
         </div>
@@ -151,13 +163,6 @@ export default function EmployeeDetail() {
       {view.leavePts > 0 && (
         <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#854d0e', marginBottom: 16, lineHeight: 1.6 }}>
           ⚠️ 이 총점(<b>{view.currentPts}P</b>)에는 <b>휴직 포인트 {view.leavePts}P</b>가 포함돼 있어요 — 휴직자 포인트 정책은 아직 확정되지 않았으니, 승진 여부를 최종 판단하실 땐 이 부분 감안해주세요.
-        </div>
-      )}
-
-      {emp.eval_comment_2025 && (
-        <div style={crd}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>💬 2025년도 평가 코멘트</div>
-          <div style={{ fontSize: 13, lineHeight: 1.7, color: '#334155', whiteSpace: 'pre-wrap' }}>{emp.eval_comment_2025}</div>
         </div>
       )}
 
@@ -253,6 +258,15 @@ export default function EmployeeDetail() {
       </div>
       )}
 
+      <QualitativeReviewSection
+        employeeId={id}
+        note={view.note}
+        noteFlag={view.note_flag}
+        comments={comments}
+        commentsError={commentsError}
+        onChanged={reloadComments}
+      />
+
       {showEdit && (
         <EditEmployeeModal
           employee={emp}
@@ -288,7 +302,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     cert_pts: e.cert_pts ?? 0,
     award_pts: e.award_pts ?? 0,
     note: e.note || '',
-    eval_comment_2025: e.eval_comment_2025 || '',
+    note_flag: e.note_flag || 'o',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -325,7 +339,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       cert_pts: Number(form.cert_pts) || 0,
       award_pts: Number(form.award_pts) || 0,
       note: form.note.trim() || null,
-      eval_comment_2025: form.eval_comment_2025.trim() || null,
+      note_flag: form.note_flag,
     }
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
     setSaving(false)
@@ -405,11 +419,18 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           <div style={{ flex: 1 }}><label style={lbl}>포상가점</label><input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} /></div>
         </div>
 
-        <label style={lbl}>비고 (겸직 등 자유메모)</label>
-        <input style={field} value={form.note} onChange={set('note')} />
-
-        <label style={lbl}>2025년도 평가 코멘트 (연간 통합, 정성적 코멘트)</label>
-        <textarea style={{ ...field, minHeight: 90, resize: 'vertical', fontFamily: 'inherit' }} value={form.eval_comment_2025} onChange={set('eval_comment_2025')} />
+        <label style={lbl}>비고 (근태 등 특이사항)</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select style={{ ...field, width: 90, flexShrink: 0 }} value={form.note_flag} onChange={set('note_flag')}>
+            <option value="o">o (없음)</option>
+            <option value="+">+ (긍정)</option>
+            <option value="-">− (부정)</option>
+          </select>
+          <input style={{ ...field, flex: 1 }} placeholder="근태 등 특이사항 상세 메모" value={form.note} onChange={set('note')} />
+        </div>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+          정성평가 코멘트(문제 있을 때마다 이어지는 이력)는 상세화면 하단 "승진리스트 검토 참고사항"에서 직접 추가해주세요.
+        </div>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
@@ -418,6 +439,98 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
         </div>
       </form>
     </Modal>
+  )
+}
+
+// ═══ 승진리스트 검토 참고사항 — 포인트 계산엔 안 들어가지만 승진후보 뽑을 때 같이 봐야 할 정성적 정보 ═══
+// - 비고: 근태 등 특이사항을 +/−/o 한 글자 요약 + 상세메모로 (수정 모달에서 편집)
+// - 정성평가 코멘트 이력: 문제 생길 때마다 날짜 찍어 바로 이 화면에서 추가 → 계속 이어지는 시계열 로그
+function QualitativeReviewSection({ employeeId, note, noteFlag, comments, commentsError, onChanged }) {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async (ev) => {
+    ev.preventDefault()
+    if (!text.trim()) return
+    setSaving(true); setErr('')
+    try {
+      await addEvalComment(employeeId, date, text.trim())
+      setText('')
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (commentId) => {
+    if (!window.confirm('이 코멘트를 삭제할까요?')) return
+    try {
+      await deleteEvalComment(commentId)
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    }
+  }
+
+  return (
+    <div style={crd}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📌 승진리스트 검토 참고사항</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+        승진포인트 계산엔 반영되지 않는 정성적 판단 근거예요 — 승진후보를 뽑을 때 같이 참고해주세요.
+      </div>
+
+      <div style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
+        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>비고 (근태 등 특이사항)</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <NoteFlagBadge flag={noteFlag} />
+          <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6 }}>
+            {note || <span style={{ color: '#cbd5e1' }}>기재된 특이사항 없음</span>}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>정성평가 코멘트 이력</div>
+        {comments === null ? (
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>불러오는 중…</div>
+        ) : comments.length === 0 ? (
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>등록된 코멘트가 없습니다</div>
+        ) : (
+          <div style={{ marginBottom: 12 }}>
+            {comments.map((c) => (
+              <div key={c.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 78, paddingTop: 2 }}>{c.comment_date}</div>
+                <div style={{ flex: 1, fontSize: 13, color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{c.text}</div>
+                <button
+                  type="button" onClick={() => remove(c.id)} title="삭제"
+                  style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, padding: 0 }}
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <input
+            type="date" value={date} onChange={(ev) => setDate(ev.target.value)}
+            style={{ ...field, marginBottom: 0, width: 140, flexShrink: 0 }}
+          />
+          <textarea
+            value={text} onChange={(ev) => setText(ev.target.value)}
+            placeholder="문제 상황이나 특이사항을 코멘트로 남기면 계속 이어서 쌓여요"
+            style={{ ...field, marginBottom: 0, flex: 1, minHeight: 38, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !text.trim()}>
+            {saving ? '추가 중…' : '추가'}
+          </button>
+        </form>
+        {(err || commentsError) && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err || commentsError?.message}</div>}
+      </div>
+    </div>
   )
 }
 
