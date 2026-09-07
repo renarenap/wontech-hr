@@ -30,6 +30,9 @@ create policy "authenticated_delete_eval_comments" on eval_comments for delete t
 
 -- 3) 기존에 이미 입력해둔 2025년도 평가 코멘트(있는 사람만)를 새 로그의 첫 항목으로 그대로 이관.
 --    eval_comment_2025 컬럼 자체는 지우지 않음(과거 CSV 호환용으로 남겨둠, 화면에서는 더 이상 직접 쓰지 않음).
+--    이 DB엔 그 컬럼을 추가하는 예전 마이그레이션이 실제로 적용된 적이 없어서, 먼저 없으면 만들어둠(빈 상태로 시작해도 안전).
+alter table employees add column if not exists eval_comment_2025 text;
+
 insert into eval_comments (employee_id, comment_date, text)
 select id, '2025-12-31'::date, eval_comment_2025
 from employees
