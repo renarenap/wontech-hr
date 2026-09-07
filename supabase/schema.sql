@@ -32,7 +32,8 @@ create table if not exists employees (
   eng_lifetime boolean default false,   -- 영어 AL/IH 평생인정 여부 (유효기간 만료돼도 승진요건 충족)
   eng2_pts numeric default 0,
   eng2_lifetime boolean default false,
-  cert_pts numeric default 0,
+  cert_pts numeric default 0,   -- 자격가점 합계(캐시값) — cert_entries 건별 입력을 카테고리 상한 적용해 합산한 값, 앱이 자동 갱신
+  tech_pts numeric default 0,   -- 기술성과 합계(캐시값) — tech_entries 건별 입력을 상한(최대6P) 적용해 합산한 값, 앱이 자동 갱신
   award_pts numeric default 0,
   note text,                    -- (레거시) 비고 자유메모 단일 텍스트 — note_entries로 대체됨, 과거 호환용으로만 보존
   note_flag text not null default 'o' check (note_flag in ('+','-','o')),  -- 비고 요약값: +긍정/-부정(근태 등 문제)/o없음, 목록에 배지로 표시
@@ -60,6 +61,31 @@ create table if not exists note_entries (
   created_at timestamptz default now()
 );
 create index if not exists note_entries_employee_id_idx on note_entries(employee_id);
+
+-- 자격가점(cert_pts)/기술성과(tech_pts)를 숫자 하나 직접입력 대신 건별로 입력받는 이력.
+-- 카테고리별 상한(전문자격 최대6P, 직무자격 최대3P / 기술성과 전체 최대6P)은 앱에서 계산해서
+-- employees.cert_pts·tech_pts(캐시값)에 다시 씀 — promotion.js 등 기존 계산 로직은 그대로 그 캐시값을 읽음.
+create table if not exists cert_entries (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid references employees(id) on delete cascade,
+  category text not null check (category in ('전문자격','직무자격')),
+  name text not null,
+  valid_until date,             -- 유효기간(만료일). 평생인정이면 null
+  points numeric not null default 0,
+  created_at timestamptz default now()
+);
+create index if not exists cert_entries_employee_id_idx on cert_entries(employee_id);
+
+create table if not exists tech_entries (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid references employees(id) on delete cascade,
+  category text not null check (category in ('국내특허','해외특허','국내논문','국제논문')),
+  name text not null,
+  achieved_date date,
+  points numeric not null default 0,
+  created_at timestamptz default now()
+);
+create index if not exists tech_entries_employee_id_idx on tech_entries(employee_id);
 
 -- 직급별 승진 기준 파라미터 (하드코딩 대신 이 테이블로 관리 — '기준값 설정' 화면에서 편집)
 create table if not exists rank_criteria (
@@ -156,11 +182,13 @@ create table if not exists employees_archive (
   division text, dept text, team text, locations text[], rank text, track text, role text,
   level int, req_tenure int, threshold int,
   base_pts numeric, backfill_full_tenure boolean, leave_years numeric, eng_pts numeric, eng_lifetime boolean,
-  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, award_pts numeric, note text, note_flag text,
+  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, tech_pts numeric, award_pts numeric, note text, note_flag text,
   join_date date, leave_start_date date, leave_end_date date,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   eval_comments_snapshot jsonb,     -- 삭제 시점의 eval_comments(정성평가 코멘트 이력) 백업 — 같은 이유로 cascade 삭제되므로
   note_entries_snapshot jsonb,      -- 삭제 시점의 note_entries(비고 이력) 백업 — 같은 이유로 cascade 삭제되므로
+  cert_entries_snapshot jsonb,      -- 삭제 시점의 cert_entries(자격가점 이력) 백업 — 같은 이유로 cascade 삭제되므로
+  tech_entries_snapshot jsonb,      -- 삭제 시점의 tech_entries(기술성과 이력) 백업 — 같은 이유로 cascade 삭제되므로
   transfer_ids uuid[],              -- 삭제 시점에 이 직원 소유였던 transfers.id 목록 (복구 시 재연결용)
   resign_date date not null,
   archived_at timestamptz default now()
@@ -216,6 +244,8 @@ alter table rank_criteria enable row level security;
 alter table evaluations enable row level security;
 alter table eval_comments enable row level security;
 alter table note_entries enable row level security;
+alter table cert_entries enable row level security;
+alter table tech_entries enable row level security;
 alter table onboarding enable row level security;
 alter table onboarding_tasks enable row level security;
 alter table hires enable row level security;
@@ -258,7 +288,7 @@ declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','employees_archive','evaluations','eval_comments','note_entries','onboarding','onboarding_tasks',
+    'employees','employees_archive','evaluations','eval_comments','note_entries','cert_entries','tech_entries','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop

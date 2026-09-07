@@ -5,6 +5,10 @@ import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPa
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
 import { fetchNoteEntries, addNoteEntry, deleteNoteEntry } from '../lib/noteEntries'
+import {
+  fetchCertEntries, addCertEntry, deleteCertEntry, CERT_CATEGORY_CAP, CERT_CATEGORY_DEFAULT_PTS, CERT_CATEGORIES,
+  fetchTechEntries, addTechEntry, deleteTechEntry, TECH_CATEGORY_DEFAULT_PTS, TECH_CATEGORIES, TECH_TOTAL_CAP,
+} from '../lib/certTech'
 import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
@@ -20,6 +24,10 @@ export default function EmployeeDetail() {
   const [commentsError, setCommentsError] = useState(null)
   const [noteEntries, setNoteEntries] = useState(null) // 비고(근태 등 특이사항) 이력(시계열) — 마찬가지로 따로 로드·갱신
   const [noteEntriesError, setNoteEntriesError] = useState(null)
+  const [certEntries, setCertEntries] = useState(null) // 자격가점 건별 이력 — 카테고리 상한 적용해 employees.cert_pts로 캐시됨
+  const [certEntriesError, setCertEntriesError] = useState(null)
+  const [techEntries, setTechEntries] = useState(null) // 기술성과 건별 이력 — 상한 적용해 employees.tech_pts로 캐시됨
+  const [techEntriesError, setTechEntriesError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -49,6 +57,20 @@ export default function EmployeeDetail() {
     fetchNoteEntries(id).then(setNoteEntries).catch((err) => setNoteEntriesError(err))
   }
   useEffect(() => { reloadNoteEntries() }, [id])
+
+  // 자격가점/기술성과는 항목이 바뀔 때 employees.cert_pts·tech_pts(캐시값)도 같이 바뀌므로,
+  // 이력 목록 새로고침과 함께 refreshKey로 상단 포인트 구성도 다시 불러옴
+  const reloadCertEntries = () => {
+    fetchCertEntries(id).then(setCertEntries).catch((err) => setCertEntriesError(err))
+    setRefreshKey((k) => k + 1)
+  }
+  useEffect(() => { fetchCertEntries(id).then(setCertEntries).catch((err) => setCertEntriesError(err)) }, [id])
+
+  const reloadTechEntries = () => {
+    fetchTechEntries(id).then(setTechEntries).catch((err) => setTechEntriesError(err))
+    setRefreshKey((k) => k + 1)
+  }
+  useEffect(() => { fetchTechEntries(id).then(setTechEntries).catch((err) => setTechEntriesError(err)) }, [id])
 
   // note_flag(+/-/o 요약)는 employees 테이블 필드라 여기서 바로 업데이트하고, 전체 새로고침(refreshKey)으로 반영
   const updateNoteFlag = async (flag) => {
@@ -83,7 +105,8 @@ export default function EmployeeDetail() {
     },
     { l: '경력인정 포인트', v: view.backfillPts || 0, c: P },
     { l: '휴직 포인트', v: view.leavePts || 0, c: B },
-    { l: '전문/직무 자격·기술성과 가점', v: view.cert_pts || 0, c: '#6366f1' },
+    { l: '전문/직무 자격 가점', v: view.cert_pts || 0, c: '#6366f1' },
+    { l: '기술성과 가점', v: view.tech_pts || 0, c: '#8b5cf6' },
     { l: '포상 가점', v: view.award_pts || 0, c: '#ca8a04' },
     { l: '어학 가점 (영어+제2외국어)', v: (view.eng_pts || 0) + (view.eng2_pts || 0), c: '#0284c7' },
   ]
@@ -273,6 +296,20 @@ export default function EmployeeDetail() {
       </div>
       )}
 
+      <CertSection
+        employeeId={id}
+        entries={certEntries}
+        entriesError={certEntriesError}
+        onChanged={reloadCertEntries}
+      />
+
+      <TechSection
+        employeeId={id}
+        entries={techEntries}
+        entriesError={techEntriesError}
+        onChanged={reloadTechEntries}
+      />
+
       <QualitativeReviewSection
         employeeId={id}
         noteFlag={view.note_flag}
@@ -317,7 +354,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     eng_lifetime: !!e.eng_lifetime,
     eng2_pts: e.eng2_pts ?? 0,
     eng2_lifetime: !!e.eng2_lifetime,
-    cert_pts: e.cert_pts ?? 0,
     award_pts: e.award_pts ?? 0,
   })
   const [error, setError] = useState('')
@@ -352,7 +388,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       eng_lifetime: form.eng_lifetime,
       eng2_pts: Number(form.eng2_pts) || 0,
       eng2_lifetime: form.eng2_lifetime,
-      cert_pts: Number(form.cert_pts) || 0,
       award_pts: Number(form.award_pts) || 0,
     }
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
@@ -428,13 +463,12 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
             </label>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>자격가점</label><input style={field} type="number" step="0.5" value={form.cert_pts} onChange={set('cert_pts')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>포상가점</label><input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} /></div>
-        </div>
+        <label style={lbl}>포상가점</label>
+        <input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} />
 
         <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
-          비고(+/−/o, 근태 등 특이사항)와 정성평가 코멘트 이력은 상세화면 하단 "승진리스트 검토 참고사항"에서 직접 등록·수정해주세요.
+          자격가점·기술성과는 상세화면의 "자격증"·"기술성과" 카드에서, 비고(+/−/o)와 정성평가 코멘트 이력은
+          "승진리스트 검토 참고사항"에서 각각 건별로 직접 등록·수정해주세요.
         </div>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
@@ -508,6 +542,208 @@ function TimelineLog({ entries, entriesError, dateKey, onAdd, onDelete, placehol
           style={{ ...field, marginBottom: 0, flex: 1, minHeight: 38, resize: 'vertical', fontFamily: 'inherit' }}
         />
         <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !text.trim()}>
+          {saving ? '추가 중…' : '추가'}
+        </button>
+      </form>
+      {(err || entriesError) && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err || entriesError?.message}</div>}
+    </div>
+  )
+}
+
+// ═══ 자격 가점 — 전문자격(건당3P·최대6P)/직무자격(건당1P·최대3P)을 건별로 입력받아 카테고리 상한 자동 적용 ═══
+function CertSection({ employeeId, entries, entriesError, onChanged }) {
+  const [category, setCategory] = useState(CERT_CATEGORIES[0])
+  const [name, setName] = useState('')
+  const [validUntil, setValidUntil] = useState('')
+  const [points, setPoints] = useState(CERT_CATEGORY_DEFAULT_PTS[CERT_CATEGORIES[0]])
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const changeCategory = (cat) => { setCategory(cat); setPoints(CERT_CATEGORY_DEFAULT_PTS[cat]) }
+
+  const submit = async (ev) => {
+    ev.preventDefault()
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      await addCertEntry(employeeId, { category, name: name.trim(), valid_until: validUntil, points: Number(points) || 0 })
+      setName(''); setValidUntil('')
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (entryId) => {
+    if (!window.confirm('이 항목을 삭제할까요?')) return
+    try {
+      await deleteCertEntry(entryId, employeeId)
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    }
+  }
+
+  const byCat = {}
+  ;(entries || []).forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + Number(e.points || 0) })
+
+  return (
+    <div style={crd}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🎓 자격증</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+        전문자격은 건당 3P(최대 6P), 직무자격은 건당 1P(최대 3P) — 카테고리별 상한을 넘는 만큼은 자동으로 컷돼요.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        {CERT_CATEGORIES.map((cat) => (
+          <div key={cat}>
+            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{cat}</div>
+            <Prog current={Math.min(byCat[cat] || 0, CERT_CATEGORY_CAP[cat])} max={CERT_CATEGORY_CAP[cat]} />
+          </div>
+        ))}
+      </div>
+
+      {entries === null ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>불러오는 중…</div>
+      ) : entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>등록된 자격증이 없습니다</div>
+      ) : (
+        <div style={{ marginBottom: 12 }}>
+          {entries.map((row) => (
+            <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+              <Bd color="#6366f1" bg="#eef2ff">{row.category}</Bd>
+              <div style={{ flex: 1, fontSize: 13, color: '#334155' }}>{row.name}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 90 }}>{row.valid_until ? `~${row.valid_until}` : '평생인정'}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#6366f1', minWidth: 32, textAlign: 'right' }}>{row.points}P</div>
+              <button
+                type="button" onClick={() => remove(row.id)} title="삭제"
+                style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, padding: 0 }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>구분</label>
+          <select style={{ ...field, marginBottom: 0, width: 100 }} value={category} onChange={(ev) => changeCategory(ev.target.value)}>
+            {CERT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ ...lbl, marginTop: 0 }}>자격증명</label>
+          <input style={{ ...field, marginBottom: 0 }} value={name} onChange={(ev) => setName(ev.target.value)} placeholder="예: 정보처리기사" />
+        </div>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>유효기간(비우면 평생인정)</label>
+          <input style={{ ...field, marginBottom: 0, width: 150 }} type="date" value={validUntil} onChange={(ev) => setValidUntil(ev.target.value)} />
+        </div>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>점수</label>
+          <input style={{ ...field, marginBottom: 0, width: 70 }} type="number" step="0.5" value={points} onChange={(ev) => setPoints(ev.target.value)} />
+        </div>
+        <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !name.trim()}>
+          {saving ? '추가 중…' : '추가'}
+        </button>
+      </form>
+      {(err || entriesError) && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err || entriesError?.message}</div>}
+    </div>
+  )
+}
+
+// ═══ 기술성과 — 특허/논문(국내2P·해외3P)을 건별로 입력받아 전체 상한(최대6P) 자동 적용 ═══
+function TechSection({ employeeId, entries, entriesError, onChanged }) {
+  const [category, setCategory] = useState(TECH_CATEGORIES[0])
+  const [name, setName] = useState('')
+  const [achievedDate, setAchievedDate] = useState('')
+  const [points, setPoints] = useState(TECH_CATEGORY_DEFAULT_PTS[TECH_CATEGORIES[0]])
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const changeCategory = (cat) => { setCategory(cat); setPoints(TECH_CATEGORY_DEFAULT_PTS[cat]) }
+
+  const submit = async (ev) => {
+    ev.preventDefault()
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      await addTechEntry(employeeId, { category, name: name.trim(), achieved_date: achievedDate, points: Number(points) || 0 })
+      setName(''); setAchievedDate('')
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (entryId) => {
+    if (!window.confirm('이 항목을 삭제할까요?')) return
+    try {
+      await deleteTechEntry(entryId, employeeId)
+      onChanged()
+    } catch (e) {
+      setErr(e.message)
+    }
+  }
+
+  const total = (entries || []).reduce((s, e) => s + Number(e.points || 0), 0)
+
+  return (
+    <div style={crd}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🔬 기술성과 (특허·논문)</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+        국내 특허·논문은 건당 2P, 해외·국제는 건당 3P — 합계 최대 6P를 넘는 만큼은 자동으로 컷돼요.
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <Prog current={Math.min(total, TECH_TOTAL_CAP)} max={TECH_TOTAL_CAP} />
+      </div>
+
+      {entries === null ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>불러오는 중…</div>
+      ) : entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>등록된 기술성과가 없습니다</div>
+      ) : (
+        <div style={{ marginBottom: 12 }}>
+          {entries.map((row) => (
+            <div key={row.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+              <Bd color="#8b5cf6" bg="#f5f3ff">{row.category}</Bd>
+              <div style={{ flex: 1, fontSize: 13, color: '#334155' }}>{row.name}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 90 }}>{row.achieved_date || ''}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#8b5cf6', minWidth: 32, textAlign: 'right' }}>{row.points}P</div>
+              <button
+                type="button" onClick={() => remove(row.id)} title="삭제"
+                style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, padding: 0 }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>구분</label>
+          <select style={{ ...field, marginBottom: 0, width: 110 }} value={category} onChange={(ev) => changeCategory(ev.target.value)}>
+            {TECH_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ ...lbl, marginTop: 0 }}>특허/논문명</label>
+          <input style={{ ...field, marginBottom: 0 }} value={name} onChange={(ev) => setName(ev.target.value)} placeholder="예: OOO 장치" />
+        </div>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>등록/게재일</label>
+          <input style={{ ...field, marginBottom: 0, width: 150 }} type="date" value={achievedDate} onChange={(ev) => setAchievedDate(ev.target.value)} />
+        </div>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>점수</label>
+          <input style={{ ...field, marginBottom: 0, width: 70 }} type="number" step="0.5" value={points} onChange={(ev) => setPoints(ev.target.value)} />
+        </div>
+        <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !name.trim()}>
           {saving ? '추가 중…' : '추가'}
         </button>
       </form>
