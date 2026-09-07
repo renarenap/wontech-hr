@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
@@ -35,9 +35,9 @@ const CSV_COLUMNS = [
   { key: 'name', label: '이름' },
   { key: 'join_date', label: '입사일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'locations', label: '위치(대전/판교/해외법인, 복수는 쉼표로 구분)' },
-  { key: 'division', label: '실' },
-  { key: 'dept', label: '팀' },
-  { key: 'team', label: '파트' },
+  { key: 'division', label: ORG_LEVEL_LABEL.division },
+  { key: 'dept', label: ORG_LEVEL_LABEL.dept },
+  { key: 'team', label: ORG_LEVEL_LABEL.team },
   { key: 'rank', label: '직급' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
@@ -67,7 +67,7 @@ const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'o
 // 선택 다운로드(승진후보 등 골라서 CSV로) 전용 컬럼 — 포인트현황 표에 보이는 값 그대로
 const SELECTION_CSV_COLUMNS = [
   { key: 'name', label: '이름' },
-  { key: 'orgPathStr', label: '소속(실·팀·파트)' },
+  { key: 'orgPathStr', label: `소속(${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team})` },
   { key: 'rank', label: '직급' },
   { key: 'trackLabel', label: '직군' },
   { key: 'currentPts', label: '포인트' },
@@ -250,7 +250,7 @@ export default function EmployeeList() {
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showExportImport, setShowExportImport] = useState(false)
-  const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 실·팀·파트로 펼칠지(헤더 토글, 전체 행 공통)
+  const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 부문·본부·팀으로 펼칠지(헤더 토글, 전체 행 공통)
   const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
   const [selectedIds, setSelectedIds] = useState(() => new Set()) // 승진후보 등 골라서 CSV로 다운로드할 때 체크한 행
 
@@ -333,7 +333,7 @@ export default function EmployeeList() {
     return l
   }, [employees, scopedByTrack, search, rankF, locF, divF, deptF, teamF, statusF, sortKey, sortAsc])
 
-  // 직군 탭을 바꾸면 그 탭에 없는 값으로 걸려있던 직급/실/팀/파트 필터는 초기화
+  // 직군 탭을 바꾸면 그 탭에 없는 값으로 걸려있던 직급/부문/본부/팀 필터는 초기화
   useEffect(() => {
     setRankF('all'); setDivF('all'); setDeptF('all'); setTeamF('all')
   }, [trackF])
@@ -418,7 +418,7 @@ export default function EmployeeList() {
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input style={{ ...inp, minWidth: 200 }} placeholder="🔍  이름 · 실 · 팀 · 파트" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input style={{ ...inp, minWidth: 200 }} placeholder={`🔍  이름 · ${ORG_LEVEL_LABEL.division} · ${ORG_LEVEL_LABEL.dept} · ${ORG_LEVEL_LABEL.team}`} value={search} onChange={(e) => setSearch(e.target.value)} />
         <select style={{ ...inp, cursor: 'pointer' }} value={rankF} onChange={(e) => setRankF(e.target.value)}>
           <option value="all">전체 직급</option>
           {rankOptions.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -428,15 +428,15 @@ export default function EmployeeList() {
           {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={divF} onChange={(e) => setDivF(e.target.value)}>
-          <option value="all">전체 실</option>
+          <option value="all">전체 {ORG_LEVEL_LABEL.division}</option>
           {divOptions.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={deptF} onChange={(e) => setDeptF(e.target.value)}>
-          <option value="all">전체 팀</option>
+          <option value="all">전체 {ORG_LEVEL_LABEL.dept}</option>
           {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
         </select>
         <select style={{ ...inp, cursor: 'pointer' }} value={teamF} onChange={(e) => setTeamF(e.target.value)}>
-          <option value="all">전체 파트</option>
+          <option value="all">전체 {ORG_LEVEL_LABEL.team}</option>
           {teamOptions.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <StatusFilterDropdown value={statusF} onChange={setStatusF} />
@@ -780,9 +780,12 @@ function buildPatch(raw) {
     join_date: normalizeDate(pickByPrefix(raw, '입사일(')),
     // "대전"만 써도 "대전(원텍연구원)"으로 인식(라벨에 원텍연구원이 붙기 전에 이미 채워둔 값 보정용)
     locations: pickByPrefix(raw, '위치(').split(',').map((s) => s.trim()).filter(Boolean).map((s) => (s === '대전' ? '대전(원텍연구원)' : s)),
-    division: (raw['실'] || '').trim() || null,
-    dept: (raw['팀'] || '').trim() || null,
-    team: (raw['파트'] || '').trim() || null,
+    // 예전(2026-09 개편 전) 라벨 "실/팀/파트"로 받아둔 백업 CSV를 올려도 되게 그 헤더도 그대로 인정.
+    // 새 라벨 컬럼 자체가 이 행에 아예 없을 때만(값이 빈칸인 게 아니라 헤더 자체가 없을 때만) 예전 헤더를 대신 씀 —
+    // 안 그러면 새 CSV에서 "본부"가 빈칸인 사람이 같은 글자인 새 "팀" 헤더값을 잘못 주워올 수 있음(예전 팀=지금 본부, 예전 파트=지금 팀).
+    division: ((ORG_LEVEL_LABEL.division in raw ? raw[ORG_LEVEL_LABEL.division] : raw['실']) || '').trim() || null,
+    dept: ((ORG_LEVEL_LABEL.dept in raw ? raw[ORG_LEVEL_LABEL.dept] : raw['팀']) || '').trim() || null,
+    team: ((ORG_LEVEL_LABEL.team in raw ? raw[ORG_LEVEL_LABEL.team] : raw['파트']) || '').trim() || null,
     rank: (raw['직급'] || '').trim(),
     // "임원"은 실제 DB엔 없는 값(임원 여부는 직급으로 자동 판단) — CSV에서만 편의상 받아주고 사무로 정규화.
     // "사무영어필수"는 예전 값(사무외국어필수로 개명됨) — 예전에 받아둔 CSV를 올려도 되게 자동 변환.
@@ -823,7 +826,7 @@ function buildPatch(raw) {
 function validatePatch(patch) {
   const errs = []
   if (!patch.name) errs.push('이름이 비어있어요')
-  if (!patch.division && !patch.dept && !patch.team) errs.push('실/팀/파트 중 최소 하나는 있어야 해요')
+  if (!patch.division && !patch.dept && !patch.team) errs.push(`${ORG_LEVEL_LABEL.division}/${ORG_LEVEL_LABEL.dept}/${ORG_LEVEL_LABEL.team} 중 최소 하나는 있어야 해요`)
   if (!patch.rank) errs.push('직급이 비어있어요')
   if (!TRACKS.some((t) => t.value === patch.track)) errs.push(`직군 값이 이상해요: "${patch.track}" (사무/사무외국어필수/연구 중 하나여야 해요)`)
   if (!['+', '-', 'o'].includes(patch.note_flag)) errs.push(`비고평가 값이 이상해요: "${patch.note_flag}" (+/-/o 중 하나여야 해요)`)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, B, Y, orgPath } from '../lib/constants'
+import { P, G, O, B, Y, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
 import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
@@ -147,9 +147,9 @@ function AddHireModal({ onClose, onCreated }) {
         <label style={lbl}>위치</label>
         <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.division}</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.dept}</label><input style={field} required value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.team}</label><input style={field} value={form.team} onChange={set('team')} /></div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>

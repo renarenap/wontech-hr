@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, orgPath, suggestTrackForDept } from '../lib/constants'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept } from '../lib/constants'
 import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
@@ -258,21 +258,21 @@ function QuickAddHireModal({ onClose, onCreated }) {
         <label style={lbl}>위치</label>
         <LocationPicker value={locations} onChange={setLocations} />
 
-        <label style={lbl}>실</label>
-        <input style={field} placeholder="예: 글로벌영업실 (없으면 비워두세요)" value={division} onChange={(e) => setDivision(e.target.value)} />
+        <label style={lbl}>{ORG_LEVEL_LABEL.division}</label>
+        <input style={field} placeholder="예: 영업부문 (없으면 비워두세요)" value={division} onChange={(e) => setDivision(e.target.value)} />
 
-        <label style={lbl}>팀</label>
+        <label style={lbl}>{ORG_LEVEL_LABEL.dept}</label>
         <select style={field} required value={dept} onChange={(e) => setDept(e.target.value)}>
           <option value="" disabled>선택하세요</option>
           {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-          <option value="__custom__">+ 새 팀 직접 입력</option>
+          <option value="__custom__">+ 새 {ORG_LEVEL_LABEL.dept} 직접 입력</option>
         </select>
         {dept === '__custom__' && (
-          <input style={field} required placeholder="새 팀명" value={customDept} onChange={(e) => setCustomDept(e.target.value)} />
+          <input style={field} required placeholder={`새 ${ORG_LEVEL_LABEL.dept}명`} value={customDept} onChange={(e) => setCustomDept(e.target.value)} />
         )}
 
-        <label style={lbl}>파트</label>
-        <input style={field} placeholder="예: 해외CS파트 (없으면 비워두세요)" value={team} onChange={(e) => setTeam(e.target.value)} />
+        <label style={lbl}>{ORG_LEVEL_LABEL.team}</label>
+        <input style={field} placeholder="예: 해외CS팀 (없으면 비워두세요)" value={team} onChange={(e) => setTeam(e.target.value)} />
 
         <label style={lbl}>입사일</label>
         <input style={field} type="date" required value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />

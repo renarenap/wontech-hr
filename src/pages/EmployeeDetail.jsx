@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
 import { fetchNoteEntries, addNoteEntry, deleteNoteEntry } from '../lib/noteEntries'
@@ -380,7 +380,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     ev.preventDefault()
     setError('')
     if (!form.name.trim()) { setError('이름이 비어있어요'); return }
-    if (!form.division && !form.dept && !form.team) { setError('실/팀/파트 중 최소 하나는 있어야 해요'); return }
+    if (!form.division && !form.dept && !form.team) { setError(`${ORG_LEVEL_LABEL.division}/${ORG_LEVEL_LABEL.dept}/${ORG_LEVEL_LABEL.team} 중 최소 하나는 있어야 해요`); return }
     if (!form.rank.trim()) { setError('직급이 비어있어요'); return }
     setSaving(true)
     // 휴직시작·종료일이 둘 다 있으면 그걸로 휴직연차를 자동 계산(우선), 없으면 휴직연차 칸을 그대로 씀
@@ -420,9 +420,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
         <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>실</label><input style={field} value={form.division} onChange={set('division')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>팀</label><input style={field} value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>파트</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.division}</label><input style={field} value={form.division} onChange={set('division')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.dept}</label><input style={field} value={form.dept} onChange={set('dept')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.team}</label><input style={field} value={form.team} onChange={set('team')} /></div>
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>

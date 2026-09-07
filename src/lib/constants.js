@@ -70,6 +70,9 @@ export const TRACKS = [
 export const TRACK_LABEL = Object.fromEntries(TRACKS.map((t) => [t.value, t.label]))
 
 // 외국어필수 트랙 자동 제안 대상 부서 (마케팅·미래전략·해외CS·해외영업 계열 — 한국영업/국내CS 등 국내 담당은 일반으로 분류)
+// TODO: 2026-09-01 조직개편(TO-BE 조직도) 이전 부서명 기준 목록이라 지금 조직과 안 맞음.
+// 예: 해외CS가 이제 "고객만족본부" 산하 "해외CS팀"(본부 전체가 아니라 팀 단위)이라 그대로 옮기면 안 됨 —
+// 새 조직 기준으로 정리하려면 팀 단위까지 반영해야 해서 사람이 검토 후 갱신 필요.
 export const FOREIGN_LANG_REQUIRED_DEPTS = [
   '마케팅실', '미래전략실', '전략기획팀', '해외CS파트', '대전 국내CS파트', '판교 국내CS파트',
   '글로벌영업실', '글로벌영업팀', '해외법인영업파트', '해외영업팀', '해외법인영업', '해외영업',
@@ -80,8 +83,10 @@ export function suggestTrackForDept(dept, isResearch) {
   return FOREIGN_LANG_REQUIRED_DEPTS.some((d) => dept.includes(d) || d.includes(dept)) ? '사무외국어필수' : '사무'
 }
 
-// ═══ 부서(파트 단위) 목록 ═══
+// ═══ 부서(본부 단위) 목록 ═══
 // 2026.08.20자 조직도 기준으로 뽑아둔 목록 — 실제 employees 데이터에 있는 부서와 합쳐서 드롭다운에 사용
+// TODO: 2026-09-01 조직개편으로 실제 본부 구성이 바뀌었어서 이 목록도 갱신 필요(연구소/생산기술연구소/
+// 제2생산기술연구소/판교연구소/미래전략실/고객만족본부/마케팅본부/해외영업본부/국내영업본부/메디컬솔루션본부 등)
 export const DEPT_OPTIONS = [
   'B2C사업부', 'CA(Clinical Application)파트', 'Experience파트', 'H/W 개발 파트', 'S/W 개발 파트', 'TCF팀',
   '감사법무파트', '경영기획팀', '경영진', '고객만족팀', '구매팀', '글로벌물류관리팀', '글로벌영업실', '기획파트',
@@ -93,7 +98,7 @@ export const DEPT_OPTIONS = [
   '해외CS파트', '해외법인영업파트', '해외영업팀', '청소미화',
 ]
 
-// ═══ 지역(위치) — "소속"(실-팀-파트) 앞에 붙는 상위 구분 ═══
+// ═══ 지역(위치) — "소속"(부문-본부-팀) 앞에 붙는 상위 구분 ═══
 // 대전(원텍연구원)/판교(경영그룹)/해외법인 3개 축. 대전 소속인데 해외로 파견 나간 경우처럼
 // 한 사람이 2곳에 걸칠 수 있어서 다중 선택(배열, employees.locations text[])으로 저장합니다.
 // 조직개편으로 이름이 바뀔 수 있어서 하드코딩 최소화 — 화면에는 이 배열 순서 그대로 노출.
@@ -104,11 +109,11 @@ export const LOCATION_STYLE = {
   해외법인: { c: G, bg: '#dcfce7' },
 }
 
-// ═══ 소속 3단계: 실 → 팀 → 파트 ═══
-// DB 컬럼명은 마이그레이션 비용 때문에 유지: division(실, 신규) / dept(팀, 기존 '소속') / team(파트, 기존 '팀')
-export const ORG_LEVEL_LABEL = { division: '실', dept: '팀', team: '파트' }
+// ═══ 소속 3단계: 부문 → 본부 → 팀 (2026-09 조직개편, 예전엔 실 → 팀 → 파트였음) ═══
+// DB 컬럼명은 마이그레이션 비용 때문에 유지: division(부문, 예전 '실') / dept(본부, 예전 '팀') / team(팀, 예전 '파트')
+export const ORG_LEVEL_LABEL = { division: '부문', dept: '본부', team: '팀' }
 
-// 실 · 팀 · 파트를 화면에 보여줄 때 쓰는 공용 결합 함수 (없는 단계는 건너뜀)
+// 부문 · 본부 · 팀을 화면에 보여줄 때 쓰는 공용 결합 함수 (없는 단계는 건너뜀)
 export function orgPath(e) {
   return [e?.division, e?.dept, e?.team].filter(Boolean).join(' · ')
 }
