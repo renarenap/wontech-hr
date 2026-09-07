@@ -76,11 +76,12 @@ export function isEngGateTrack(employee) {
   return employee.track === '사무외국어필수' && LANG_GATE_RANKS.includes(employee.rank)
 }
 
-// 영어 또는 제2외국어 중 하나라도 Im3(2점) 이상이거나 평생인정이면 충족 — "영어"가 아니라 "외국어" 요건이라 둘 다 인정
+// 영어/중국어/일본어 중 하나라도 Im3(2점) 이상이거나 평생인정이면 충족 — "영어"가 아니라 "외국어" 요건이라 셋 다 인정
 export function engGateMet(employee) {
   const engOk = (employee.eng_pts || 0) >= 2 || !!employee.eng_lifetime
-  const eng2Ok = (employee.eng2_pts || 0) >= 2 || !!employee.eng2_lifetime
-  return engOk || eng2Ok
+  const cnOk = (employee.cn_pts || 0) >= 2 || !!employee.cn_lifetime
+  const jpOk = (employee.jp_pts || 0) >= 2 || !!employee.jp_lifetime
+  return engOk || cnOk || jpOk
 }
 
 // 대시보드/포인트현황 등에서 공통으로 쓰는 직군 구분.
@@ -115,9 +116,10 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const today = new Date().toISOString().slice(0, 10)
   const onLeaveNow = !!employee.leave_start_date && employee.leave_start_date <= today
     && (!employee.leave_end_date || employee.leave_end_date >= today)
-  // 가점(자격증·포상) + 어학(영어·제2외국어) 점수가 포인트 합산에 들어감.
+  // 가점(자격증·포상) + 어학(영어·중국어·일본어) 점수가 포인트 합산에 들어감.
   // 어학은 그와 별개로 사무직(외국어필수) 과장·차장의 필수요건 충족 여부(engGated/engOk) 판단에도 계속 쓰임 — 둘이 겹쳐도 무방
-  const addPts = (employee.cert_pts || 0) + (employee.tech_pts || 0) + (employee.award_pts || 0) + (employee.eng_pts || 0) + (employee.eng2_pts || 0)
+  const addPts = (employee.cert_pts || 0) + (employee.tech_pts || 0) + (employee.award_pts || 0)
+    + (employee.eng_pts || 0) + (employee.cn_pts || 0) + (employee.jp_pts || 0)
   const currentPts = Math.round((evalPtsSum + backfillPts + leavePts + addPts) * 10) / 10
 
   const gap = Math.max(0, threshold - currentPts)

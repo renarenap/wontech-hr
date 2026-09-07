@@ -30,8 +30,12 @@ create table if not exists employees (
   leave_end_date date,         -- 휴직 종료일(복직일). 비어있으면 아직 휴직 중으로 볼 수 있음
   eng_pts numeric default 0,
   eng_lifetime boolean default false,   -- 영어 AL/IH 평생인정 여부 (유효기간 만료돼도 승진요건 충족)
-  eng2_pts numeric default 0,
-  eng2_lifetime boolean default false,
+  cn_pts numeric default 0,
+  cn_lifetime boolean default false,
+  jp_pts numeric default 0,
+  jp_lifetime boolean default false,
+  eng2_pts numeric default 0,           -- (레거시) 제2외국어 점수 — cn_pts/jp_pts로 대체됨, 과거 CSV 호환용으로만 보존
+  eng2_lifetime boolean default false,  -- (레거시)
   cert_pts numeric default 0,   -- 자격가점 합계(캐시값) — cert_entries 건별 입력을 카테고리 상한 적용해 합산한 값, 앱이 자동 갱신
   tech_pts numeric default 0,   -- 기술성과 합계(캐시값) — tech_entries 건별 입력을 상한(최대6P) 적용해 합산한 값, 앱이 자동 갱신
   award_pts numeric default 0,
@@ -182,7 +186,8 @@ create table if not exists employees_archive (
   division text, dept text, team text, locations text[], rank text, track text, role text,
   level int, req_tenure int, threshold int,
   base_pts numeric, backfill_full_tenure boolean, leave_years numeric, eng_pts numeric, eng_lifetime boolean,
-  eng2_pts numeric, eng2_lifetime boolean, cert_pts numeric, tech_pts numeric, award_pts numeric, note text, note_flag text,
+  cn_pts numeric, cn_lifetime boolean, jp_pts numeric, jp_lifetime boolean,
+  cert_pts numeric, tech_pts numeric, award_pts numeric, note text, note_flag text,
   join_date date, leave_start_date date, leave_end_date date,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   eval_comments_snapshot jsonb,     -- 삭제 시점의 eval_comments(정성평가 코멘트 이력) 백업 — 같은 이유로 cascade 삭제되므로

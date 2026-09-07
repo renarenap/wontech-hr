@@ -47,17 +47,19 @@ const CSV_COLUMNS = [
   { key: 'backfill_full_tenure', label: '경력직인정포인트 적용(TRUE/FALSE, 아니면 평가인정포인트로 계산)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
-  { key: 'eng2_pts', label: '제2외국어점수' },
-  { key: 'eng2_lifetime', label: '제2외국어평생인정(TRUE/FALSE)' },
+  { key: 'cn_pts', label: '중국어점수' },
+  { key: 'cn_lifetime', label: '중국어평생인정(TRUE/FALSE)' },
+  { key: 'jp_pts', label: '일본어점수' },
+  { key: 'jp_lifetime', label: '일본어평생인정(TRUE/FALSE)' },
   { key: 'award_pts', label: '포상가점' },
   { key: 'note_flag', label: '비고평가(+/-/o, 기본 o)' },
   { key: 'cert_pts', label: '(참고)자격가점 — 상세화면 "자격증"에서 건별 등록' },
   { key: 'tech_pts', label: '(참고)기술성과가점 — 상세화면 "기술성과"에서 건별 등록' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'award_pts', 'note_flag']
-const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
-const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'award_pts'])
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'cn_pts', 'cn_lifetime', 'jp_pts', 'jp_lifetime', 'award_pts', 'note_flag']
+const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'cn_lifetime', 'jp_lifetime'])
+const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'cn_pts', 'jp_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
 const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, onLeave: 3, short: 4, na: 5 }
 // 상태 필터에서 고를 수 있는 항목 — 실제로 issues 배열에 담기는 값만(상태 컬럼에 뱃지로 뜨는 것과 동일)
@@ -805,8 +807,10 @@ function buildPatch(raw) {
     backfill_full_tenure: /^(true|1|y|yes)$/i.test(pickByPrefix(raw, '경력직인정포인트').trim() || pickByPrefix(raw, '경력직백필').trim()),
     eng_pts: Number(raw['영어점수']) || 0,
     eng_lifetime: /^(true|1|y|yes)$/i.test((raw['영어평생인정(TRUE/FALSE)'] || '').trim()),
-    eng2_pts: Number(raw['제2외국어점수']) || 0,
-    eng2_lifetime: /^(true|1|y|yes)$/i.test((raw['제2외국어평생인정(TRUE/FALSE)'] || '').trim()),
+    cn_pts: Number(raw['중국어점수']) || 0,
+    cn_lifetime: /^(true|1|y|yes)$/i.test((raw['중국어평생인정(TRUE/FALSE)'] || '').trim()),
+    jp_pts: Number(raw['일본어점수']) || 0,
+    jp_lifetime: /^(true|1|y|yes)$/i.test((raw['일본어평생인정(TRUE/FALSE)'] || '').trim()),
     award_pts: Number(raw['포상가점']) || 0,
     note_flag: (() => {
       const v = pickByPrefix(raw, '비고평가(').trim()

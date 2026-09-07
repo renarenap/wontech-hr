@@ -58,44 +58,15 @@ function RankTable({ id, title, subtitle, color, rows, criteriaMap, note }) {
 const CERT_NOTE = '변리사·노무사·세무사 등 직무와 직접 연관된 국가전문·기술자격에 한함'
 const PATENT_NOTE = '제1발명자 100%, 공동발명자 50% 인정'
 
-function GradeMiniTable({ rows }) {
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}>
-      <tbody>
-        {rows.map(([n, p]) => (
-          <tr key={n}>
-            <td style={{ padding: '3px 8px 3px 0', color: '#cbd5e1' }}>{n}</td>
-            <td style={{ padding: '3px 0', textAlign: 'right', fontWeight: 700, color: '#fff' }}>{p}P</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-const ENG_TIP = (
-  <div>
-    영어 OPIc 등급별 포인트
-    <GradeMiniTable rows={ENG_GRADES.map((g) => [g.n, g.p])} />
-    <div style={{ marginTop: 6, color: '#94a3b8' }}>* AL·IH 등급은 한 번 취득 시 평생 인정 (승진 후에도 유지)</div>
-  </div>
-)
-
-const CHN_TIP = (
-  <div>
-    중국어 (HSK Speaking / BCT)
-    <GradeMiniTable rows={[['고급 / A급', 4], ['중급 / B급', 3], ['초급 / C급', 2]]} />
-    <div style={{ marginTop: 6, color: '#94a3b8' }}>* 고급 등급은 영어 1등급과 동일하게 평생 인정</div>
-  </div>
-)
-
-const JPN_TIP = (
-  <div>
-    일본어 (SJPT / JPT)
-    <GradeMiniTable rows={[['AL', 4], ['IH / 700점 이상', 3], ['Im3 / 600점 이상', 2], ['Im2 / 500점 이상', 1], ['Im1 / 500점 미만', 0.5]]} />
-    <div style={{ marginTop: 6, color: '#94a3b8' }}>* AL 등급은 영어 1등급과 동일하게 평생 인정</div>
-  </div>
-)
+// 어학 등급별 배점표 — 영어/중국어/일본어 각각 별도 점수로 입력받고(상세화면 "어학" 카드),
+// 이 표는 등급→점수 환산 기준을 보여주는 참고용일 뿐 계산 로직과는 연결돼 있지 않음
+const LANG_GRADE_ROWS = [
+  { p: '4P', grade: 'AL', eng: '9~10급 · 고급', cn: '9~10급 · 고급', jp: '9~10급' },
+  { p: '3P', grade: 'IH', eng: '7~8급 · 중급', cn: '7~8급 · 중급', jp: '7~8급' },
+  { p: '2P', grade: 'IM3', eng: '5~6급 · 초급', cn: '5~6급 · 초급', jp: '5~6급' },
+  { p: '1P', grade: 'IM2', eng: '4급', cn: '4급', jp: '4급' },
+  { p: '0.5P', grade: 'IM1', eng: '3급', cn: '3급', jp: '3급' },
+]
 
 export default function Criteria() {
   const [criteriaMap, setCriteriaMap] = useState(null)
@@ -178,7 +149,7 @@ export default function Criteria() {
               </tbody>
             </table>
             <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-              * AL·IH 등급은 한 번 취득 시 평생 인정. 승진포인트 합산에 포함되고, 동시에 사무직(외국어필수) 과장·차장 승진의 별도 필수요건(영어 또는 제2외국어)으로도 쓰입니다.
+              * AL·IH 등급은 한 번 취득 시 평생 인정. 승진포인트 합산에 포함되고, 동시에 사무직(외국어필수) 과장·차장 승진의 별도 필수요건(영어·중국어·일본어 중 하나)으로도 쓰입니다.
             </div>
           </div>
         </div>
@@ -266,26 +237,35 @@ export default function Criteria() {
       </div>
 
       <div id="sec-7" style={{ ...crd, scrollMarginTop: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14, color: '#0284c7' }}>⑦ 어학 (가점 풀에 포함 + 별도 필수요건 겸용)</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: '#0284c7' }}>⑦ 어학 (가점 풀에 포함 + 별도 필수요건 겸용)</div>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 14 }}>
+          영어·중국어·일본어 각각 별도 점수로 관리돼요(상세화면 "어학" 카드에서 등록·수정). 아래는 등급→점수 환산 참고표이고,
+          이 표 자체가 계산에 자동으로 연결되진 않으니 등급을 보고 해당 점수를 직접 입력해주세요.
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr>{['구분', '세부항목', '건당', '최대'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+          <thead>
+            <tr>
+              <th style={thS}>배점</th>
+              <th style={thS}>영어<br /><span style={{ fontWeight: 400, color: '#94a3b8' }}>OPIc · TOEIC Speaking</span></th>
+              <th style={thS}>중국어<br /><span style={{ fontWeight: 400, color: '#94a3b8' }}>TSC · OPIc Chinese · HSKK</span></th>
+              <th style={thS}>일본어<br /><span style={{ fontWeight: 400, color: '#94a3b8' }}>SJPT · OPIc Japanese</span></th>
+            </tr>
+          </thead>
           <tbody>
-            {[
-              ['어학', '영어 (OPIc 1~5등급)', '0.5~4P', '4P', ENG_TIP],
-              ['어학', '중국어 (HSK Speaking·BCT)', '2~4P', '4P', CHN_TIP],
-              ['어학', '일본어 (SJPT·JPT)', '0.5~4P', '4P', JPN_TIP],
-            ].map(([a, b, c, d, note], i) => (
-              <tr key={i}>
-                <td style={{ ...tdS, fontWeight: 600 }}>{a}</td>
-                <td style={tdS}><Tip content={note}>{b}</Tip></td>
-                <td style={{ ...tdS, color: '#0284c7', fontWeight: 600 }}>{c}</td><td style={tdS}>{d}</td>
+            {LANG_GRADE_ROWS.map((r) => (
+              <tr key={r.grade}>
+                <td style={{ ...tdS, fontWeight: 700, color: '#0284c7' }}>{r.p}</td>
+                <td style={tdS}>{r.grade} · {r.eng}</td>
+                <td style={tdS}>{r.grade} · {r.cn}</td>
+                <td style={tdS}>{r.grade} · {r.jp}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 12, lineHeight: 1.6 }}>
-          * 영어·제2외국어 점수는 승진포인트 합계에 그대로 더해지고, 동시에 사무직(외국어필수) 과장·차장 승진 시 필수요건(둘 중 하나라도 Im3 이상) 충족 여부도 판단합니다.<br />
-          * 제2외국어 고급/AL 등급은 영어 1등급과 동일하게 평생 인정됩니다.
+          * 세 언어 점수 모두 승진포인트 합계에 그대로 더해지고, 동시에 사무직(외국어필수) 과장·차장 승진 시 필수요건(셋 중 하나라도 IM3 이상) 충족 여부도 판단합니다.<br />
+          * AL 등급은 취득 언어와 무관하게 평생 인정됩니다.<br />
+          * 여기 없는 기타 외국어 시험(말하기 외 시험 등)은 "자격증" 카드에 직무자격(건당 1P, 최대 3P)으로 등록해주세요.
         </div>
       </div>
     </div>

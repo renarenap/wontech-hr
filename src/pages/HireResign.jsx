@@ -62,8 +62,8 @@ async function resignEmployee(picked, lastDay) {
   const { error: e2 } = await supabase.from('employees_archive').insert({
     original_id: picked.id, name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
-    base_pts: picked.base_pts, eng_pts: picked.eng_pts, eng2_pts: picked.eng2_pts, cert_pts: picked.cert_pts, tech_pts: picked.tech_pts, award_pts: picked.award_pts,
-    eng_lifetime: picked.eng_lifetime, eng2_lifetime: picked.eng2_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
+    base_pts: picked.base_pts, eng_pts: picked.eng_pts, cn_pts: picked.cn_pts, jp_pts: picked.jp_pts, cert_pts: picked.cert_pts, tech_pts: picked.tech_pts, award_pts: picked.award_pts,
+    eng_lifetime: picked.eng_lifetime, cn_lifetime: picked.cn_lifetime, jp_lifetime: picked.jp_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
     leave_years: picked.leave_years, note: picked.note, note_flag: picked.note_flag,
     join_date: picked.join_date, leave_start_date: picked.leave_start_date, leave_end_date: picked.leave_end_date,
     evaluations_snapshot: evals || [], eval_comments_snapshot: comments || [], note_entries_snapshot: notes || [],
@@ -90,8 +90,8 @@ async function restoreEmployee(archived) {
   const payload = {
     name: archived.name, division: archived.division, dept: archived.dept, team: archived.team, locations: archived.locations || [], rank: archived.rank,
     track: archived.track, role: archived.role, level: archived.level, req_tenure: archived.req_tenure || 0, threshold: archived.threshold || 0,
-    base_pts: archived.base_pts, eng_pts: archived.eng_pts, eng2_pts: archived.eng2_pts, cert_pts: archived.cert_pts, tech_pts: archived.tech_pts, award_pts: archived.award_pts,
-    eng_lifetime: archived.eng_lifetime, eng2_lifetime: archived.eng2_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
+    base_pts: archived.base_pts, eng_pts: archived.eng_pts, cn_pts: archived.cn_pts, jp_pts: archived.jp_pts, cert_pts: archived.cert_pts, tech_pts: archived.tech_pts, award_pts: archived.award_pts,
+    eng_lifetime: archived.eng_lifetime, cn_lifetime: archived.cn_lifetime, jp_lifetime: archived.jp_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
     leave_years: archived.leave_years || 0, note: archived.note, note_flag: archived.note_flag || 'o',
     join_date: archived.join_date, leave_start_date: archived.leave_start_date, leave_end_date: archived.leave_end_date,
   }

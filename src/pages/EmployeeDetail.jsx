@@ -115,7 +115,7 @@ export default function EmployeeDetail() {
     { l: '전문/직무 자격 가점', v: view.cert_pts || 0, c: '#6366f1' },
     { l: '기술성과 가점', v: view.tech_pts || 0, c: '#8b5cf6' },
     { l: '포상 가점', v: view.award_pts || 0, c: '#ca8a04' },
-    { l: '어학 가점 (영어+제2외국어)', v: (view.eng_pts || 0) + (view.eng2_pts || 0), c: '#0284c7' },
+    { l: '어학 가점 (영어+중국어+일본어)', v: (view.eng_pts || 0) + (view.cn_pts || 0) + (view.jp_pts || 0), c: '#0284c7' },
   ]
 
   return (
@@ -174,16 +174,21 @@ export default function EmployeeDetail() {
             <div style={{ gridColumn: 'span 2' }}><div style={fl}>승진포인트 기준</div><div style={{ ...fv, color: '#94a3b8' }}>해당없음 (임원/부장/수석연구원은 별도 승진 기준을 두지 않음)</div></div>
           )}
         </div>
-        {(view.engGated || view.eng_pts > 0 || view.eng2_pts > 0) && (
+        {(view.engGated || view.eng_pts > 0 || view.cn_pts > 0 || view.jp_pts > 0) && (
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
             <div style={fl}>어학 (포인트 합계에 포함 + 사무직 외국어필수 과장·차장 필수요건 겸용)</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: '#64748b' }}>
-                영어 {view.eng_pts || 0}P{view.eng_lifetime ? ' · AL/IH 평생인정' : ''}
+                영어 {view.eng_pts || 0}P{view.eng_lifetime ? ' · 평생인정' : ''}
               </span>
-              {view.eng2_pts > 0 && (
+              {view.cn_pts > 0 && (
                 <span style={{ fontSize: 12, color: '#64748b' }}>
-                  제2외국어 {view.eng2_pts}P{view.eng2_lifetime ? ' · 평생인정' : ''}
+                  중국어 {view.cn_pts}P{view.cn_lifetime ? ' · 평생인정' : ''}
+                </span>
+              )}
+              {view.jp_pts > 0 && (
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  일본어 {view.jp_pts}P{view.jp_lifetime ? ' · 평생인정' : ''}
                 </span>
               )}
               {view.engGated && (
@@ -305,7 +310,8 @@ export default function EmployeeDetail() {
 
       <LanguageSection
         eng_pts={view.eng_pts} eng_lifetime={view.eng_lifetime}
-        eng2_pts={view.eng2_pts} eng2_lifetime={view.eng2_lifetime}
+        cn_pts={view.cn_pts} cn_lifetime={view.cn_lifetime}
+        jp_pts={view.jp_pts} jp_lifetime={view.jp_lifetime}
         onSave={updateLanguage}
       />
 
@@ -533,15 +539,28 @@ function TimelineLog({ entries, entriesError, dateKey, onAdd, onDelete, placehol
   )
 }
 
-// ═══ 어학 — 영어/제2외국어 점수·평생인정 여부. 값을 바꾸면 선택만 되고, "저장"을 눌러야 실제 반영됨 ═══
-function LanguageSection({ eng_pts, eng_lifetime, eng2_pts, eng2_lifetime, onSave }) {
-  const initial = { eng_pts: eng_pts || 0, eng_lifetime: !!eng_lifetime, eng2_pts: eng2_pts || 0, eng2_lifetime: !!eng2_lifetime }
+// 어학 카드에서 다루는 3개 언어 — 각각 점수(0.5~4P, 기준표 참고)와 평생인정 여부를 따로 관리
+const LANGUAGES = [
+  { key: 'eng', label: '영어' },
+  { key: 'cn', label: '중국어' },
+  { key: 'jp', label: '일본어' },
+]
+
+// ═══ 어학 — 영어/중국어/일본어 점수·평생인정 여부. 값을 바꾸면 선택만 되고, "저장"을 눌러야 실제 반영됨.
+// 배점 기준(AL/IH/IM3/IM2/IM1 → 4/3/2/1/0.5P)은 기준표 화면에 참고용으로만 실어두고, 여기선 그냥 결과 점수만 입력받음.
+// (말하기 시험 외 기타 외국어 시험은 직무자격과 같은 배점이라 "자격증" 카드에 직무자격으로 등록해주세요.) ═══
+function LanguageSection({ eng_pts, eng_lifetime, cn_pts, cn_lifetime, jp_pts, jp_lifetime, onSave }) {
+  const initial = {
+    eng_pts: eng_pts || 0, eng_lifetime: !!eng_lifetime,
+    cn_pts: cn_pts || 0, cn_lifetime: !!cn_lifetime,
+    jp_pts: jp_pts || 0, jp_lifetime: !!jp_lifetime,
+  }
   const [form, setForm] = useState(initial)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState('')
 
-  useEffect(() => { setForm(initial) }, [eng_pts, eng_lifetime, eng2_pts, eng2_lifetime]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setForm(initial) }, [eng_pts, eng_lifetime, cn_pts, cn_lifetime, jp_pts, jp_lifetime]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial)
 
@@ -550,7 +569,8 @@ function LanguageSection({ eng_pts, eng_lifetime, eng2_pts, eng2_lifetime, onSav
     try {
       await onSave({
         eng_pts: Number(form.eng_pts) || 0, eng_lifetime: form.eng_lifetime,
-        eng2_pts: Number(form.eng2_pts) || 0, eng2_lifetime: form.eng2_lifetime,
+        cn_pts: Number(form.cn_pts) || 0, cn_lifetime: form.cn_lifetime,
+        jp_pts: Number(form.jp_pts) || 0, jp_lifetime: form.jp_lifetime,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -566,26 +586,26 @@ function LanguageSection({ eng_pts, eng_lifetime, eng2_pts, eng2_lifetime, onSav
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🌐 어학</div>
       <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
         승진포인트 합산 + 사무직(외국어필수) 과장·차장 필수요건(Im3=2점 이상 또는 평생인정) 판정에 같이 쓰여요.
+        배점 기준(등급별 점수)은 기준표 화면을 참고해주세요.
       </div>
       <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <div>
-            <label style={{ ...lbl, marginTop: 0 }}>영어점수</label>
-            <input style={{ ...field, marginBottom: 0, width: 90 }} type="number" step="0.5" value={form.eng_pts} onChange={(ev) => setForm({ ...form, eng_pts: ev.target.value })} />
+        {LANGUAGES.map(({ key, label }) => (
+          <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ ...lbl, marginTop: 0 }}>{label}점수</label>
+              <input
+                style={{ ...field, marginBottom: 0, width: 90 }} type="number" step="0.5"
+                value={form[`${key}_pts`]} onChange={(ev) => setForm({ ...form, [`${key}_pts`]: ev.target.value })}
+              />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, paddingBottom: 10 }}>
+              <input
+                type="checkbox" checked={form[`${key}_lifetime`]}
+                onChange={(ev) => setForm({ ...form, [`${key}_lifetime`]: ev.target.checked })}
+              /> AL/IH 평생인정
+            </label>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, paddingBottom: 10 }}>
-            <input type="checkbox" checked={form.eng_lifetime} onChange={(ev) => setForm({ ...form, eng_lifetime: ev.target.checked })} /> AL/IH 평생인정
-          </label>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <div>
-            <label style={{ ...lbl, marginTop: 0 }}>제2외국어점수</label>
-            <input style={{ ...field, marginBottom: 0, width: 90 }} type="number" step="0.5" value={form.eng2_pts} onChange={(ev) => setForm({ ...form, eng2_pts: ev.target.value })} />
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, paddingBottom: 10 }}>
-            <input type="checkbox" checked={form.eng2_lifetime} onChange={(ev) => setForm({ ...form, eng2_lifetime: ev.target.checked })} /> 평생인정
-          </label>
-        </div>
+        ))}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
           <button
             type="button" onClick={save} disabled={!dirty || saving}
