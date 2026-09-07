@@ -79,6 +79,13 @@ export default function EmployeeDetail() {
     setRefreshKey((k) => k + 1)
   }
 
+  // 어학 점수도 employees 테이블 필드라 마찬가지로 바로 업데이트 후 새로고침
+  const updateLanguage = async (patch) => {
+    const { error: err } = await supabase.from('employees').update(patch).eq('id', id)
+    if (err) throw new Error(err.message)
+    setRefreshKey((k) => k + 1)
+  }
+
   // emp: 실제 저장된 값 그대로(휴직 포인트·연차 포함) — 수정 모달 초기값 등엔 항상 이걸 씀
   const emp = useMemo(() => raw && deriveEmployee(raw.employee, raw.evals, raw.rankCriteria, raw.leaveRate), [raw])
   // view: 화면에 실제로 보여줄 값 — "휴직기간 반영" 토글을 끄면 휴직연차를 0으로 놓고 다시 계산해서
@@ -296,6 +303,12 @@ export default function EmployeeDetail() {
       </div>
       )}
 
+      <LanguageSection
+        eng_pts={view.eng_pts} eng_lifetime={view.eng_lifetime}
+        eng2_pts={view.eng2_pts} eng2_lifetime={view.eng2_lifetime}
+        onSave={updateLanguage}
+      />
+
       <CertSection
         employeeId={id}
         entries={certEntries}
@@ -350,10 +363,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     leave_end_date: e.leave_end_date || '',
     leave_years: e.leave_years ?? 0,
     backfill_full_tenure: !!e.backfill_full_tenure,
-    eng_pts: e.eng_pts ?? 0,
-    eng_lifetime: !!e.eng_lifetime,
-    eng2_pts: e.eng2_pts ?? 0,
-    eng2_lifetime: !!e.eng2_lifetime,
     award_pts: e.award_pts ?? 0,
   })
   const [error, setError] = useState('')
@@ -384,10 +393,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       leave_end_date: form.leave_end_date || null,
       leave_years: autoLeaveYears !== null ? autoLeaveYears / 12 : Number(form.leave_years) || 0,
       backfill_full_tenure: form.backfill_full_tenure,
-      eng_pts: Number(form.eng_pts) || 0,
-      eng_lifetime: form.eng_lifetime,
-      eng2_pts: Number(form.eng2_pts) || 0,
-      eng2_lifetime: form.eng2_lifetime,
       award_pts: Number(form.award_pts) || 0,
     }
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
@@ -441,34 +446,12 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <label style={lbl}>영어점수</label>
-            <input style={field} type="number" step="0.5" value={form.eng_pts} onChange={set('eng_pts')} />
-          </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
-              <input type="checkbox" checked={form.eng_lifetime} onChange={setChecked('eng_lifetime')} /> AL/IH 평생인정
-            </label>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <label style={lbl}>제2외국어점수</label>
-            <input style={field} type="number" step="0.5" value={form.eng2_pts} onChange={set('eng2_pts')} />
-          </div>
-          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', paddingBottom: 10 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12 }}>
-              <input type="checkbox" checked={form.eng2_lifetime} onChange={setChecked('eng2_lifetime')} /> 평생인정
-            </label>
-          </div>
-        </div>
         <label style={lbl}>포상가점</label>
         <input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} />
 
         <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
-          자격가점·기술성과는 상세화면의 "자격증"·"기술성과" 카드에서, 비고(+/−/o)와 정성평가 코멘트 이력은
-          "승진리스트 검토 참고사항"에서 각각 건별로 직접 등록·수정해주세요.
+          어학·자격가점·기술성과는 상세화면의 "어학"·"자격증"·"기술성과" 카드에서, 비고(+/−/o)와 정성평가 코멘트
+          이력은 "승진리스트 검토 참고사항"에서 각각 직접 등록·수정해주세요.
         </div>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
@@ -550,6 +533,77 @@ function TimelineLog({ entries, entriesError, dateKey, onAdd, onDelete, placehol
   )
 }
 
+// ═══ 어학 — 영어/제2외국어 점수·평생인정 여부. 값을 바꾸면 선택만 되고, "저장"을 눌러야 실제 반영됨 ═══
+function LanguageSection({ eng_pts, eng_lifetime, eng2_pts, eng2_lifetime, onSave }) {
+  const initial = { eng_pts: eng_pts || 0, eng_lifetime: !!eng_lifetime, eng2_pts: eng2_pts || 0, eng2_lifetime: !!eng2_lifetime }
+  const [form, setForm] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => { setForm(initial) }, [eng_pts, eng_lifetime, eng2_pts, eng2_lifetime]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial)
+
+  const save = async () => {
+    setSaving(true); setErr(''); setSaved(false)
+    try {
+      await onSave({
+        eng_pts: Number(form.eng_pts) || 0, eng_lifetime: form.eng_lifetime,
+        eng2_pts: Number(form.eng2_pts) || 0, eng2_lifetime: form.eng2_lifetime,
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={crd}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🌐 어학</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+        승진포인트 합산 + 사무직(외국어필수) 과장·차장 필수요건(Im3=2점 이상 또는 평생인정) 판정에 같이 쓰여요.
+      </div>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ ...lbl, marginTop: 0 }}>영어점수</label>
+            <input style={{ ...field, marginBottom: 0, width: 90 }} type="number" step="0.5" value={form.eng_pts} onChange={(ev) => setForm({ ...form, eng_pts: ev.target.value })} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, paddingBottom: 10 }}>
+            <input type="checkbox" checked={form.eng_lifetime} onChange={(ev) => setForm({ ...form, eng_lifetime: ev.target.checked })} /> AL/IH 평생인정
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ ...lbl, marginTop: 0 }}>제2외국어점수</label>
+            <input style={{ ...field, marginBottom: 0, width: 90 }} type="number" step="0.5" value={form.eng2_pts} onChange={(ev) => setForm({ ...form, eng2_pts: ev.target.value })} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, paddingBottom: 10 }}>
+            <input type="checkbox" checked={form.eng2_lifetime} onChange={(ev) => setForm({ ...form, eng2_lifetime: ev.target.checked })} /> 평생인정
+          </label>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
+          <button
+            type="button" onClick={save} disabled={!dirty || saving}
+            style={{
+              padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: dirty ? 'pointer' : 'default',
+              border: 'none', background: dirty ? P : '#e2e8f0', color: dirty ? '#fff' : '#94a3b8',
+            }}
+          >
+            {saving ? '저장 중…' : '저장'}
+          </button>
+          {saved && <span style={{ color: G, fontSize: 11, fontWeight: 600 }}>✓ 저장됨</span>}
+          {err && <span style={{ color: '#dc2626', fontSize: 11 }}>{err}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ═══ 자격 가점 — 전문자격(건당3P·최대6P)/직무자격(건당1P·최대3P)을 건별로 입력받아 카테고리 상한 자동 적용 ═══
 function CertSection({ employeeId, entries, entriesError, onChanged }) {
   const [category, setCategory] = useState(CERT_CATEGORIES[0])
@@ -593,7 +647,7 @@ function CertSection({ employeeId, entries, entriesError, onChanged }) {
     <div style={crd}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🎓 자격증</div>
       <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
-        전문자격은 건당 3P(최대 6P), 직무자격은 건당 1P(최대 3P) — 카테고리별 상한을 넘는 만큼은 자동으로 컷돼요.
+        전문자격: 건당 3P(최대 6P) · 직무 유관 자격: 건당 1P(최대 3P) — 카테고리 상한을 넘을 경우는 반영되지 않습니다.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -696,7 +750,7 @@ function TechSection({ employeeId, entries, entriesError, onChanged }) {
     <div style={crd}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🔬 기술성과 (특허·논문)</div>
       <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
-        국내 특허·논문은 건당 2P, 해외·국제는 건당 3P — 합계 최대 6P를 넘는 만큼은 자동으로 컷돼요.
+        국내 특허·논문: 건당 2P · 해외·국제 특허·논문: 건당 3P(합계 최대 6P) — 상한을 넘을 경우는 반영되지 않습니다.
       </div>
 
       <div style={{ marginBottom: 16 }}>
