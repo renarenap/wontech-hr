@@ -229,8 +229,8 @@ function QuickAddHireModal({ onClose, onCreated }) {
   useEffect(() => {
     if (trackTouched) return
     if (isResearch) { setTrack('연구'); return }
-    if (deptVal) setTrack(suggestTrackForDept(deptVal, false))
-  }, [deptVal, isResearch, trackTouched])
+    if (deptVal || team) setTrack(suggestTrackForDept(deptVal, false, team))
+  }, [deptVal, team, isResearch, trackTouched])
 
   const submit = async (e) => {
     e.preventDefault()
