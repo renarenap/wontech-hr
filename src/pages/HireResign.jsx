@@ -43,14 +43,16 @@ async function addHireToRoster({ name, division = null, dept, team = null, locat
 
 // ═══ 공용 로직: employees_archive로 스냅샷 이동 후 employees에서 제거 ═══
 async function resignEmployee(picked, lastDay) {
-  const [{ data: evals, error: e1 }, { data: transfers, error: e0 }, { data: comments, error: ec }] = await Promise.all([
+  const [{ data: evals, error: e1 }, { data: transfers, error: e0 }, { data: comments, error: ec }, { data: notes, error: en }] = await Promise.all([
     supabase.from('evaluations').select('*').eq('employee_id', picked.id),
     supabase.from('transfers').select('id').eq('employee_id', picked.id),
     supabase.from('eval_comments').select('*').eq('employee_id', picked.id),
+    supabase.from('note_entries').select('*').eq('employee_id', picked.id),
   ])
   if (e1) throw new Error(e1.message)
   if (e0) throw new Error(e0.message)
   if (ec) throw new Error(ec.message)
+  if (en) throw new Error(en.message)
 
   const { error: e2 } = await supabase.from('employees_archive').insert({
     original_id: picked.id, name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
@@ -59,7 +61,8 @@ async function resignEmployee(picked, lastDay) {
     eng_lifetime: picked.eng_lifetime, eng2_lifetime: picked.eng2_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
     leave_years: picked.leave_years, note: picked.note, note_flag: picked.note_flag,
     join_date: picked.join_date, leave_start_date: picked.leave_start_date, leave_end_date: picked.leave_end_date,
-    evaluations_snapshot: evals || [], eval_comments_snapshot: comments || [], transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
+    evaluations_snapshot: evals || [], eval_comments_snapshot: comments || [], note_entries_snapshot: notes || [],
+    transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
   })
   if (e2) throw new Error(e2.message)
 
@@ -105,6 +108,14 @@ async function restoreEmployee(archived) {
       commentSnapshot.map((c) => ({ comment_date: c.comment_date, text: c.text, employee_id: emp.id }))
     )
     if (e5) throw new Error(e5.message)
+  }
+
+  const noteSnapshot = archived.note_entries_snapshot || []
+  if (noteSnapshot.length > 0) {
+    const { error: e6 } = await supabase.from('note_entries').insert(
+      noteSnapshot.map((n) => ({ entry_date: n.entry_date, text: n.text, employee_id: emp.id }))
+    )
+    if (e6) throw new Error(e6.message)
   }
 
   // 퇴사 시점에 저장해둔 발령(transfers) 기록을 복구된 프로필에 다시 연결

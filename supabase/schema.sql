@@ -34,8 +34,8 @@ create table if not exists employees (
   eng2_lifetime boolean default false,
   cert_pts numeric default 0,
   award_pts numeric default 0,
-  note text,                    -- 자유 메모(겸직 등 특이사항 상세) — 상세화면·CSV로 편집
-  note_flag text not null default 'o' check (note_flag in ('+','-','o')),  -- 비고 요약값: +긍정/-부정(근태 등 문제)/o없음
+  note text,                    -- (레거시) 비고 자유메모 단일 텍스트 — note_entries로 대체됨, 과거 호환용으로만 보존
+  note_flag text not null default 'o' check (note_flag in ('+','-','o')),  -- 비고 요약값: +긍정/-부정(근태 등 문제)/o없음, 목록에 배지로 표시
   eval_comment_2025 text,       -- (레거시) 2025년도 평가결과 코멘트 단일 텍스트 — eval_comments로 대체됨, 과거 CSV 호환용으로만 보존
   created_at timestamptz default now()
 );
@@ -49,6 +49,17 @@ create table if not exists eval_comments (
   created_at timestamptz default now()
 );
 create index if not exists eval_comments_employee_id_idx on eval_comments(employee_id);
+
+-- 비고(근태 등 특이사항) 이력 — note(레거시 단일 텍스트) 대신, 정성평가 코멘트와 같은 방식으로 계속 추가하는 시계열 로그.
+-- 목록에 보이는 +/-/o 요약(employees.note_flag)은 그대로 두고, 그 밑의 상세 텍스트만 로그화함.
+create table if not exists note_entries (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid references employees(id) on delete cascade,
+  entry_date date not null default current_date,
+  text text not null,
+  created_at timestamptz default now()
+);
+create index if not exists note_entries_employee_id_idx on note_entries(employee_id);
 
 -- 직급별 승진 기준 파라미터 (하드코딩 대신 이 테이블로 관리 — '기준값 설정' 화면에서 편집)
 create table if not exists rank_criteria (
@@ -149,6 +160,7 @@ create table if not exists employees_archive (
   join_date date, leave_start_date date, leave_end_date date,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   eval_comments_snapshot jsonb,     -- 삭제 시점의 eval_comments(정성평가 코멘트 이력) 백업 — 같은 이유로 cascade 삭제되므로
+  note_entries_snapshot jsonb,      -- 삭제 시점의 note_entries(비고 이력) 백업 — 같은 이유로 cascade 삭제되므로
   transfer_ids uuid[],              -- 삭제 시점에 이 직원 소유였던 transfers.id 목록 (복구 시 재연결용)
   resign_date date not null,
   archived_at timestamptz default now()
@@ -203,6 +215,7 @@ alter table employees_archive enable row level security;
 alter table rank_criteria enable row level security;
 alter table evaluations enable row level security;
 alter table eval_comments enable row level security;
+alter table note_entries enable row level security;
 alter table onboarding enable row level security;
 alter table onboarding_tasks enable row level security;
 alter table hires enable row level security;
@@ -245,7 +258,7 @@ declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','employees_archive','evaluations','eval_comments','onboarding','onboarding_tasks',
+    'employees','employees_archive','evaluations','eval_comments','note_entries','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop

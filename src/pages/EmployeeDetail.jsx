@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
+import { fetchNoteEntries, addNoteEntry, deleteNoteEntry } from '../lib/noteEntries'
 import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
@@ -17,6 +18,8 @@ export default function EmployeeDetail() {
   const [includeLeave, setIncludeLeave] = useState(true) // false면 휴직기간 포인트·연차를 빼고 실제 근무 기록만으로 계산
   const [comments, setComments] = useState(null) // 정성평가 코멘트 이력(시계열) — employees 테이블과 별개로 따로 로드·갱신
   const [commentsError, setCommentsError] = useState(null)
+  const [noteEntries, setNoteEntries] = useState(null) // 비고(근태 등 특이사항) 이력(시계열) — 마찬가지로 따로 로드·갱신
+  const [noteEntriesError, setNoteEntriesError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -41,6 +44,18 @@ export default function EmployeeDetail() {
     fetchEvalComments(id).then(setComments).catch((err) => setCommentsError(err))
   }
   useEffect(() => { reloadComments() }, [id])
+
+  const reloadNoteEntries = () => {
+    fetchNoteEntries(id).then(setNoteEntries).catch((err) => setNoteEntriesError(err))
+  }
+  useEffect(() => { reloadNoteEntries() }, [id])
+
+  // note_flag(+/-/o 요약)는 employees 테이블 필드라 여기서 바로 업데이트하고, 전체 새로고침(refreshKey)으로 반영
+  const updateNoteFlag = async (flag) => {
+    const { error: err } = await supabase.from('employees').update({ note_flag: flag }).eq('id', id)
+    if (err) throw new Error(err.message)
+    setRefreshKey((k) => k + 1)
+  }
 
   // emp: 실제 저장된 값 그대로(휴직 포인트·연차 포함) — 수정 모달 초기값 등엔 항상 이걸 씀
   const emp = useMemo(() => raw && deriveEmployee(raw.employee, raw.evals, raw.rankCriteria, raw.leaveRate), [raw])
@@ -106,9 +121,9 @@ export default function EmployeeDetail() {
                 )}
               </div>
             )}
-            {(view.note || view.note_flag !== 'o') && (
+            {(noteEntries?.[0] || view.note_flag !== 'o') && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <NoteFlagBadge flag={view.note_flag} /> {view.note}
+                <NoteFlagBadge flag={view.note_flag} /> {noteEntries?.[0]?.text}
               </div>
             )}
           </div>
@@ -260,11 +275,14 @@ export default function EmployeeDetail() {
 
       <QualitativeReviewSection
         employeeId={id}
-        note={view.note}
         noteFlag={view.note_flag}
+        onFlagChanged={updateNoteFlag}
+        noteEntries={noteEntries}
+        noteEntriesError={noteEntriesError}
+        onNoteEntriesChanged={reloadNoteEntries}
         comments={comments}
         commentsError={commentsError}
-        onChanged={reloadComments}
+        onCommentsChanged={reloadComments}
       />
 
       {showEdit && (
@@ -301,8 +319,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     eng2_lifetime: !!e.eng2_lifetime,
     cert_pts: e.cert_pts ?? 0,
     award_pts: e.award_pts ?? 0,
-    note: e.note || '',
-    note_flag: e.note_flag || 'o',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -338,8 +354,6 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       eng2_lifetime: form.eng2_lifetime,
       cert_pts: Number(form.cert_pts) || 0,
       award_pts: Number(form.award_pts) || 0,
-      note: form.note.trim() || null,
-      note_flag: form.note_flag,
     }
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
     setSaving(false)
@@ -419,17 +433,8 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           <div style={{ flex: 1 }}><label style={lbl}>포상가점</label><input style={field} type="number" step="0.5" value={form.award_pts} onChange={set('award_pts')} /></div>
         </div>
 
-        <label style={lbl}>비고 (근태 등 특이사항)</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <select style={{ ...field, width: 90, flexShrink: 0 }} value={form.note_flag} onChange={set('note_flag')}>
-            <option value="o">o (없음)</option>
-            <option value="+">+ (긍정)</option>
-            <option value="-">− (부정)</option>
-          </select>
-          <input style={{ ...field, flex: 1 }} placeholder="근태 등 특이사항 상세 메모" value={form.note} onChange={set('note')} />
-        </div>
-        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
-          정성평가 코멘트(문제 있을 때마다 이어지는 이력)는 상세화면 하단 "승진리스트 검토 참고사항"에서 직접 추가해주세요.
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
+          비고(+/−/o, 근태 등 특이사항)와 정성평가 코멘트 이력은 상세화면 하단 "승진리스트 검토 참고사항"에서 직접 등록·수정해주세요.
         </div>
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
@@ -442,10 +447,8 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
   )
 }
 
-// ═══ 승진리스트 검토 참고사항 — 포인트 계산엔 안 들어가지만 승진후보 뽑을 때 같이 봐야 할 정성적 정보 ═══
-// - 비고: 근태 등 특이사항을 +/−/o 한 글자 요약 + 상세메모로 (수정 모달에서 편집)
-// - 정성평가 코멘트 이력: 문제 생길 때마다 날짜 찍어 바로 이 화면에서 추가 → 계속 이어지는 시계열 로그
-function QualitativeReviewSection({ employeeId, note, noteFlag, comments, commentsError, onChanged }) {
+// 날짜+텍스트가 계속 쌓이는 시계열 로그 UI — 비고(근태 등 특이사항)와 정성평가 코멘트 둘 다 이 모양이라 공용화함
+function TimelineLog({ entries, entriesError, dateKey, onAdd, onDelete, placeholder, emptyLabel }) {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [text, setText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -456,9 +459,8 @@ function QualitativeReviewSection({ employeeId, note, noteFlag, comments, commen
     if (!text.trim()) return
     setSaving(true); setErr('')
     try {
-      await addEvalComment(employeeId, date, text.trim())
+      await onAdd(date, text.trim())
       setText('')
-      onChanged()
     } catch (e) {
       setErr(e.message)
     } finally {
@@ -466,13 +468,70 @@ function QualitativeReviewSection({ employeeId, note, noteFlag, comments, commen
     }
   }
 
-  const remove = async (commentId) => {
-    if (!window.confirm('이 코멘트를 삭제할까요?')) return
+  const remove = async (id) => {
+    if (!window.confirm('이 항목을 삭제할까요?')) return
     try {
-      await deleteEvalComment(commentId)
-      onChanged()
+      await onDelete(id)
     } catch (e) {
       setErr(e.message)
+    }
+  }
+
+  return (
+    <div>
+      {entries === null ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>불러오는 중…</div>
+      ) : entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>{emptyLabel}</div>
+      ) : (
+        <div style={{ marginBottom: 12 }}>
+          {entries.map((row) => (
+            <div key={row.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 78, paddingTop: 2 }}>{row[dateKey]}</div>
+              <div style={{ flex: 1, fontSize: 13, color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{row.text}</div>
+              <button
+                type="button" onClick={() => remove(row.id)} title="삭제"
+                style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, padding: 0 }}
+              >✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <input
+          type="date" value={date} onChange={(ev) => setDate(ev.target.value)}
+          style={{ ...field, marginBottom: 0, width: 140, flexShrink: 0 }}
+        />
+        <textarea
+          value={text} onChange={(ev) => setText(ev.target.value)}
+          placeholder={placeholder}
+          style={{ ...field, marginBottom: 0, flex: 1, minHeight: 38, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !text.trim()}>
+          {saving ? '추가 중…' : '추가'}
+        </button>
+      </form>
+      {(err || entriesError) && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err || entriesError?.message}</div>}
+    </div>
+  )
+}
+
+// ═══ 승진리스트 검토 참고사항 — 포인트 계산엔 안 들어가지만 승진후보 뽑을 때 같이 봐야 할 정성적 정보 ═══
+// - 비고: 근태 등 특이사항. 목록에 뜨는 +/−/o 요약은 여기서 바로 바꾸고, 상세 내용은 정성평가처럼 계속 이어지는 로그
+// - 정성평가 코멘트 이력: 문제 생길 때마다 날짜 찍어 바로 이 화면에서 추가 → 계속 이어지는 시계열 로그
+function QualitativeReviewSection({
+  employeeId, noteFlag, onFlagChanged,
+  noteEntries, noteEntriesError, onNoteEntriesChanged,
+  comments, commentsError, onCommentsChanged,
+}) {
+  const [flagErr, setFlagErr] = useState('')
+  const changeFlag = async (flag) => {
+    if (flag === noteFlag) return
+    setFlagErr('')
+    try {
+      await onFlagChanged(flag)
+    } catch (e) {
+      setFlagErr(e.message)
     }
   }
 
@@ -484,51 +543,42 @@ function QualitativeReviewSection({ employeeId, note, noteFlag, comments, commen
       </div>
 
       <div style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>비고 (근태 등 특이사항)</div>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-          <NoteFlagBadge flag={noteFlag} />
-          <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6 }}>
-            {note || <span style={{ color: '#cbd5e1' }}>기재된 특이사항 없음</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>비고 (근태 등 특이사항) — 목록 요약</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['+', 'o', '-'].map((f) => (
+              <button
+                key={f} type="button" onClick={() => changeFlag(f)} title={f === '+' ? '긍정' : f === '-' ? '부정(근태 등 문제)' : '특이사항 없음'}
+                style={{
+                  width: 26, height: 26, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: f === noteFlag ? '2px solid #334155' : '1px solid var(--border)',
+                  background: f === noteFlag ? '#f1f5f9' : '#fff', color: '#475569',
+                }}
+              >
+                {f === '-' ? '−' : f}
+              </button>
+            ))}
           </div>
+          {flagErr && <span style={{ color: '#dc2626', fontSize: 11 }}>{flagErr}</span>}
         </div>
+        <TimelineLog
+          entries={noteEntries} entriesError={noteEntriesError} dateKey="entry_date"
+          onAdd={async (date, text) => { await addNoteEntry(employeeId, date, text); onNoteEntriesChanged() }}
+          onDelete={async (id) => { await deleteNoteEntry(id); onNoteEntriesChanged() }}
+          placeholder="지각·징계 등 특이사항을 남기면 계속 이어서 쌓여요"
+          emptyLabel="등록된 특이사항이 없습니다"
+        />
       </div>
 
       <div>
         <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>정성평가 코멘트 이력</div>
-        {comments === null ? (
-          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>불러오는 중…</div>
-        ) : comments.length === 0 ? (
-          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>등록된 코멘트가 없습니다</div>
-        ) : (
-          <div style={{ marginBottom: 12 }}>
-            {comments.map((c) => (
-              <div key={c.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
-                <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 78, paddingTop: 2 }}>{c.comment_date}</div>
-                <div style={{ flex: 1, fontSize: 13, color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{c.text}</div>
-                <button
-                  type="button" onClick={() => remove(c.id)} title="삭제"
-                  style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: 13, padding: 0 }}
-                >✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={submit} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <input
-            type="date" value={date} onChange={(ev) => setDate(ev.target.value)}
-            style={{ ...field, marginBottom: 0, width: 140, flexShrink: 0 }}
-          />
-          <textarea
-            value={text} onChange={(ev) => setText(ev.target.value)}
-            placeholder="문제 상황이나 특이사항을 코멘트로 남기면 계속 이어서 쌓여요"
-            style={{ ...field, marginBottom: 0, flex: 1, minHeight: 38, resize: 'vertical', fontFamily: 'inherit' }}
-          />
-          <button type="submit" style={{ ...btnPrimary, flexShrink: 0 }} disabled={saving || !text.trim()}>
-            {saving ? '추가 중…' : '추가'}
-          </button>
-        </form>
-        {(err || commentsError) && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{err || commentsError?.message}</div>}
+        <TimelineLog
+          entries={comments} entriesError={commentsError} dateKey="comment_date"
+          onAdd={async (date, text) => { await addEvalComment(employeeId, date, text); onCommentsChanged() }}
+          onDelete={async (id) => { await deleteEvalComment(id); onCommentsChanged() }}
+          placeholder="문제 상황이나 특이사항을 코멘트로 남기면 계속 이어서 쌓여요"
+          emptyLabel="등록된 코멘트가 없습니다"
+        />
       </div>
     </div>
   )

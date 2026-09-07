@@ -52,10 +52,9 @@ const CSV_COLUMNS = [
   { key: 'cert_pts', label: '자격가점' },
   { key: 'award_pts', label: '포상가점' },
   { key: 'note_flag', label: '비고평가(+/-/o, 기본 o)' },
-  { key: 'note', label: '비고(근태 등 특이사항 상세)' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note_flag', 'note']
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'eng2_pts', 'eng2_lifetime', 'cert_pts', 'award_pts', 'note_flag']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'eng2_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'eng2_pts', 'cert_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -76,7 +75,7 @@ const SELECTION_CSV_COLUMNS = [
   { key: 'backfillPts', label: '경력인정P' },
   { key: 'statusLabel', label: '상태' },
   { key: 'note_flag', label: '비고평가(+/-/o)' },
-  { key: 'note', label: '비고 상세' },
+  { key: 'latestNoteStr', label: '비고 최근 특이사항' },
   { key: 'latestCommentStr', label: '정성평가 최근 코멘트' },
 ]
 
@@ -256,15 +255,16 @@ export default function EmployeeList() {
     let cancelled = false
     async function load() {
       setError(null)
-      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, { data: comments, error: e3 }, rankCriteria, leaveRate] = await Promise.all([
+      const [{ data: emps, error: e1 }, { data: evals, error: e2 }, { data: comments, error: e3 }, { data: notes, error: e4 }, rankCriteria, leaveRate] = await Promise.all([
         supabase.from('employees').select('*'),
         supabase.from('evaluations').select('employee_id, period, grade, points').order('period'),
         supabase.from('eval_comments').select('employee_id, comment_date, text').order('comment_date', { ascending: false }),
+        supabase.from('note_entries').select('employee_id, entry_date, text').order('entry_date', { ascending: false }),
         fetchRankCriteria(),
         fetchLeaveRate(),
       ])
       if (cancelled) return
-      if (e1 || e2 || e3) { setError(e1 || e2 || e3); return }
+      if (e1 || e2 || e3 || e4) { setError(e1 || e2 || e3 || e4); return }
       const byEmp = {}
       ;(evals || []).forEach((ev) => {
         if (!byEmp[ev.employee_id]) byEmp[ev.employee_id] = []
@@ -275,10 +275,16 @@ export default function EmployeeList() {
         if (!commentsByEmp[c.employee_id]) commentsByEmp[c.employee_id] = []
         commentsByEmp[c.employee_id].push(c)
       })
+      const notesByEmp = {}
+      ;(notes || []).forEach((n) => {
+        if (!notesByEmp[n.employee_id]) notesByEmp[n.employee_id] = []
+        notesByEmp[n.employee_id].push(n)
+      })
       const list = (emps || []).map((e) => {
         const history = sortByPeriod(byEmp[e.id] || [])
         const empComments = commentsByEmp[e.id] || [] // 이미 comment_date 내림차순으로 불러왔으니 [0]이 최신
-        return { ...deriveEmployee(e, history, rankCriteria, leaveRate), history, comments: empComments }
+        const empNotes = notesByEmp[e.id] || [] // 이미 entry_date 내림차순으로 불러왔으니 [0]이 최신
+        return { ...deriveEmployee(e, history, rankCriteria, leaveRate), history, comments: empComments, noteEntries: empNotes }
       })
       setEmployees(list)
     }
@@ -361,6 +367,7 @@ export default function EmployeeList() {
       trackLabel: TRACK_LABEL[e.track] || e.track,
       gapStr: e.gap > 0 ? `-${e.gap}P` : '충족',
       statusLabel: (e.issues || []).map((i) => (STATUS_LABEL[i] || STATUS_LABEL.short).label).join(' / '),
+      latestNoteStr: e.noteEntries?.[0] ? `${e.noteEntries[0].entry_date}: ${e.noteEntries[0].text}` : '',
       latestCommentStr: e.comments?.[0] ? `${e.comments[0].comment_date}: ${e.comments[0].text}` : '',
     }))
     downloadCSV(`승진후보_선택다운로드_${stamp}.csv`, rows, SELECTION_CSV_COLUMNS)
@@ -531,7 +538,7 @@ export default function EmployeeList() {
                     )}
                   </td>
                   <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
-                    <Tip content={e.note || '기재된 특이사항 없음'}>
+                    <Tip content={e.noteEntries?.[0] ? `최근(${e.noteEntries[0].entry_date}): ${e.noteEntries[0].text}${e.noteEntries.length > 1 ? `\n(총 ${e.noteEntries.length}건, 상세화면에서 전체 확인)` : ''}` : '기재된 특이사항 없음'}>
                       <span><NoteFlagBadge flag={e.note_flag} /></span>
                     </Tip>
                   </td>
@@ -805,7 +812,6 @@ function buildPatch(raw) {
       const v = pickByPrefix(raw, '비고평가(').trim()
       return ['+', '-', 'o'].includes(v) ? v : 'o'
     })(),
-    note: pickByPrefix(raw, '비고(근태').trim() || null,
   }
   return patch
 }
