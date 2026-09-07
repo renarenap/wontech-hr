@@ -516,6 +516,61 @@ function TimelineLog({ entries, entriesError, dateKey, onAdd, onDelete, placehol
   )
 }
 
+// 비고 +/−/o 요약 선택기 — 버튼 클릭은 "선택"만 하고, 실수로 바로 저장되지 않게 별도 "저장" 버튼을 눌러야 실제 반영됨
+function NoteFlagEditor({ noteFlag, onSave }) {
+  const [selected, setSelected] = useState(noteFlag)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => { setSelected(noteFlag) }, [noteFlag]) // 서버에서 새로 불러온 값(저장 성공 후 등)으로 동기화
+
+  const dirty = selected !== noteFlag
+
+  const save = async () => {
+    setSaving(true); setErr(''); setSaved(false)
+    try {
+      await onSave(selected)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {['+', 'o', '-'].map((f) => (
+          <button
+            key={f} type="button" onClick={() => setSelected(f)} title={f === '+' ? '긍정' : f === '-' ? '부정(근태 등 문제)' : '특이사항 없음'}
+            style={{
+              width: 26, height: 26, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+              border: f === selected ? '2px solid #334155' : '1px solid var(--border)',
+              background: f === selected ? '#f1f5f9' : '#fff', color: '#475569',
+            }}
+          >
+            {f === '-' ? '−' : f}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button" onClick={save} disabled={!dirty || saving}
+        style={{
+          padding: '4px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: dirty ? 'pointer' : 'default',
+          border: 'none', background: dirty ? P : '#e2e8f0', color: dirty ? '#fff' : '#94a3b8',
+        }}
+      >
+        {saving ? '저장 중…' : '저장'}
+      </button>
+      {saved && <span style={{ color: G, fontSize: 11, fontWeight: 600 }}>✓ 저장됨</span>}
+      {err && <span style={{ color: '#dc2626', fontSize: 11 }}>{err}</span>}
+    </>
+  )
+}
+
 // ═══ 승진리스트 검토 참고사항 — 포인트 계산엔 안 들어가지만 승진후보 뽑을 때 같이 봐야 할 정성적 정보 ═══
 // - 비고: 근태 등 특이사항. 목록에 뜨는 +/−/o 요약은 여기서 바로 바꾸고, 상세 내용은 정성평가처럼 계속 이어지는 로그
 // - 정성평가 코멘트 이력: 문제 생길 때마다 날짜 찍어 바로 이 화면에서 추가 → 계속 이어지는 시계열 로그
@@ -524,17 +579,6 @@ function QualitativeReviewSection({
   noteEntries, noteEntriesError, onNoteEntriesChanged,
   comments, commentsError, onCommentsChanged,
 }) {
-  const [flagErr, setFlagErr] = useState('')
-  const changeFlag = async (flag) => {
-    if (flag === noteFlag) return
-    setFlagErr('')
-    try {
-      await onFlagChanged(flag)
-    } catch (e) {
-      setFlagErr(e.message)
-    }
-  }
-
   return (
     <div style={crd}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📌 승진리스트 검토 참고사항</div>
@@ -545,21 +589,7 @@ function QualitativeReviewSection({
       <div style={{ paddingBottom: 16, marginBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>비고 (근태 등 특이사항) — 목록 요약</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {['+', 'o', '-'].map((f) => (
-              <button
-                key={f} type="button" onClick={() => changeFlag(f)} title={f === '+' ? '긍정' : f === '-' ? '부정(근태 등 문제)' : '특이사항 없음'}
-                style={{
-                  width: 26, height: 26, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                  border: f === noteFlag ? '2px solid #334155' : '1px solid var(--border)',
-                  background: f === noteFlag ? '#f1f5f9' : '#fff', color: '#475569',
-                }}
-              >
-                {f === '-' ? '−' : f}
-              </button>
-            ))}
-          </div>
-          {flagErr && <span style={{ color: '#dc2626', fontSize: 11 }}>{flagErr}</span>}
+          <NoteFlagEditor noteFlag={noteFlag} onSave={onFlagChanged} />
         </div>
         <TimelineLog
           entries={noteEntries} entriesError={noteEntriesError} dateKey="entry_date"
