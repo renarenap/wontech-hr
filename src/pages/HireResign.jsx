@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept } from '../lib/constants'
-import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker } from '../components/ui'
+import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, todayStr } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
 import Resign from './Resign'
@@ -79,8 +79,9 @@ async function resignEmployee(picked, lastDay) {
   if (e3) throw new Error(e3.message)
 
   const { error: e4 } = await supabase.from('resignations').insert({
+    // status는 더 이상 여기서 안 정함 — Resign.jsx 화면에서 최종근무일 기준으로 항상 자동 판정해서 보여줌
     name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
-    submit_date: lastDay, last_day: lastDay, status: '진행중',
+    submit_date: lastDay, last_day: lastDay,
   })
   if (e4) throw new Error(e4.message)
 }
@@ -164,10 +165,13 @@ export default function HireResign() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-        <button style={btnGhost} onClick={() => setShowImport(true)}>📄 변동현황 워드파일 업로드</button>
-        <button style={{ ...btnPrimary, background: O }} onClick={() => setShowAddResign(true)}>− 퇴사자 등록</button>
-        <button style={{ ...btnPrimary, background: G }} onClick={() => setShowAddHire(true)}>+ 입사자 등록</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontSize: 11, color: '#94a3b8' }}>기준일 {todayStr()}</span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={btnGhost} onClick={() => setShowImport(true)}>📄 변동현황 워드파일 업로드</button>
+          <button style={{ ...btnPrimary, background: O }} onClick={() => setShowAddResign(true)}>− 퇴사자 등록</button>
+          <button style={{ ...btnPrimary, background: G }} onClick={() => setShowAddHire(true)}>+ 입사자 등록</button>
+        </div>
       </div>
 
       <SectionTitle icon="📥">입사 예정자</SectionTitle>

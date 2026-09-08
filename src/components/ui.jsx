@@ -161,6 +161,36 @@ export function dDayFrom(dateStr) {
   return Math.ceil((d - n) / 864e5)
 }
 
+// 오늘 날짜(YYYY-MM-DD), 로컬 타임존 기준 — 화면에 "기준일"로 그대로 보여줄 때 씀
+export function todayStr() {
+  const n = new Date()
+  const pad = (v) => String(v).padStart(2, '0')
+  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`
+}
+
+// 입사예정자/퇴사현황처럼 날짜 하나(YYYY-MM-DD)를 기준으로 달별로 묶어서 보여줄 때 씀.
+// 날짜가 없는 항목은 맨 뒤 "날짜 미정" 그룹으로 몰아둠. 그룹은 날짜 오름차순.
+export function groupByMonth(list, dateKey) {
+  const groups = {}
+  list.forEach((item) => {
+    const raw = item[dateKey]
+    const key = raw && /^\d{4}-\d{2}/.test(raw) ? raw.slice(0, 7) : '__none__'
+    if (!groups[key]) groups[key] = []
+    groups[key].push(item)
+  })
+  return Object.entries(groups).sort(([a], [b]) => {
+    if (a === '__none__') return 1
+    if (b === '__none__') return -1
+    return a.localeCompare(b)
+  })
+}
+
+export function monthLabel(key) {
+  if (key === '__none__') return '날짜 미정'
+  const [y, m] = key.split('-')
+  return `${y}년 ${Number(m)}월`
+}
+
 // 세부항목에 마우스를 올리거나 클릭하면 예시/부연설명을 보여주는 툴팁 (클릭하면 고정 표시 — 다시 클릭해서 닫음)
 export function Tip({ children, content, width = 260 }) {
   const [hover, setHover] = useState(false)
@@ -235,11 +265,19 @@ export const btnPrimary = { background: O, color: '#fff', border: 'none', border
 export const btnGhost = { background: '#fff', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 16px', fontSize: 12, color: '#64748b', cursor: 'pointer' }
 export const btnDanger = { ...btnGhost, color: '#dc2626', borderColor: '#fecaca' }
 
+// 배경(어두운 바깥 영역) 클릭으로는 안 닫힘 — 입력 중이던 폼이 실수로 날아가는 걸 막기 위해
+// 명시적으로 취소/닫기 버튼을 누르거나 우측 상단 ✕를 눌러야만 닫힘
 export function Modal({ title, onClose, children, width = 380 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '92vw', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>{title}</div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ width, maxWidth: '92vw', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.18)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{title}</div>
+          <button
+            type="button" onClick={onClose} title="닫기"
+            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 0, marginLeft: 12 }}
+          >✕</button>
+        </div>
         {children}
       </div>
     </div>

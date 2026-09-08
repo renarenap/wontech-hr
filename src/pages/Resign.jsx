@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, O, R, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
-import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, groupByMonth, monthLabel, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
   ['handover_done', '업무 인수인계 완료'],
@@ -14,7 +14,10 @@ const CHECK_FIELDS = [
 function withDerived(r) {
   const done = CHECK_FIELDS.filter(([f]) => r[f]).length
   const total = CHECK_FIELDS.length
-  return { ...r, done, total, pct: Math.round((done / total) * 100), dDay: dDayFrom(r.last_day) }
+  const dDay = dDayFrom(r.last_day)
+  // 상태는 더 이상 수동 입력값을 안 믿고 최종근무일이 지났는지로 자동 판정 — 등록해두고 깜빡 잊어도 알아서 처리완료로 넘어감
+  const status = dDay <= 0 ? '완료' : '진행중'
+  return { ...r, done, total, pct: Math.round((done / total) * 100), dDay, status }
 }
 
 export default function Resign({ hideAdd = false }) {
@@ -73,35 +76,38 @@ export default function Resign({ hideAdd = false }) {
       ]} />
       <div style={{ display: 'grid', gridTemplateColumns: s ? '1fr 1fr' : '1fr', gap: 16 }}>
         <div style={crd}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>퇴사 현황</div>
-          {list.length === 0 ? <EmptyState /> : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '위치', '소속', '직급', '사유', '퇴사 신청일', '최종 근무일', 'D-Day', '상태', '처리율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>
-                {list.map((r) => {
-                  const st = stCfg[r.status] || stCfg['완료']
-                  return (
-                    <tr key={r.id} style={{ cursor: 'pointer', background: sel === r.id ? '#FFF5F0' : 'transparent' }}
-                      onClick={() => setSel(r.id === sel ? null : r.id)}
-                      onMouseEnter={(ev) => { if (sel !== r.id) ev.currentTarget.style.background = '#f8fafc' }}
-                      onMouseLeave={(ev) => { if (sel !== r.id) ev.currentTarget.style.background = 'transparent' }}>
-                      <td style={{ ...tdS, fontWeight: 600 }}>{r.name}</td>
-                      <td style={tdS}><LocationBadges locations={r.locations} /></td>
-                      <td style={{ ...tdS, color: '#64748b' }}>{orgPath(r)}</td>
-                      <td style={tdS}>{r.rank}</td>
-                      <td style={tdS}><Bd color="#475569" bg="#f1f5f9">{r.reason}</Bd></td>
-                      <td style={tdS}>{r.submit_date}</td>
-                      <td style={tdS}>{r.last_day}</td>
-                      <td style={tdS}><DdayBd d={r.dDay} /></td>
-                      <td style={tdS}><Bd color={st.c} bg={st.bg}>{r.status}</Bd></td>
-                      <td style={tdS}><Prog current={r.done} max={r.total} /></td>
-                      <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(r) }}>삭제</button></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>퇴사 현황 (최종 근무일 월별)</div>
+          {list.length === 0 ? <EmptyState /> : groupByMonth(list, 'last_day').map(([mkey, rows]) => (
+            <div key={mkey} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>{monthLabel(mkey)} ({rows.length}명)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['이름', '위치', '소속', '직급', '사유', '퇴사 신청일', '최종 근무일', 'D-Day', '상태', '처리율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const st = stCfg[r.status] || stCfg['완료']
+                    return (
+                      <tr key={r.id} style={{ cursor: 'pointer', background: sel === r.id ? '#FFF5F0' : 'transparent' }}
+                        onClick={() => setSel(r.id === sel ? null : r.id)}
+                        onMouseEnter={(ev) => { if (sel !== r.id) ev.currentTarget.style.background = '#f8fafc' }}
+                        onMouseLeave={(ev) => { if (sel !== r.id) ev.currentTarget.style.background = 'transparent' }}>
+                        <td style={{ ...tdS, fontWeight: 600 }}>{r.name}</td>
+                        <td style={tdS}><LocationBadges locations={r.locations} /></td>
+                        <td style={{ ...tdS, color: '#64748b' }}>{orgPath(r)}</td>
+                        <td style={tdS}>{r.rank}</td>
+                        <td style={tdS}><Bd color="#475569" bg="#f1f5f9">{r.reason}</Bd></td>
+                        <td style={tdS}>{r.submit_date}</td>
+                        <td style={tdS}>{r.last_day}</td>
+                        <td style={tdS}><DdayBd d={r.dDay} /></td>
+                        <td style={tdS}><Bd color={st.c} bg={st.bg}>{r.status}</Bd></td>
+                        <td style={tdS}><Prog current={r.done} max={r.total} /></td>
+                        <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(r) }}>삭제</button></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
         {s && (
           <div style={crd}>
@@ -128,7 +134,7 @@ export default function Resign({ hideAdd = false }) {
 }
 
 function AddResignModal({ onClose, onCreated }) {
-  const [form, setForm] = useState({ name: '', division: '', dept: '', team: '', locations: [], rank: '', reason: '개인사유', submit_date: '', last_day: '', status: '진행중' })
+  const [form, setForm] = useState({ name: '', division: '', dept: '', team: '', locations: [], rank: '', reason: '개인사유', submit_date: '', last_day: '' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -168,10 +174,9 @@ function AddResignModal({ onClose, onCreated }) {
           <div style={{ flex: 1 }}><label style={lbl}>퇴사 신청일</label><input style={field} type="date" required value={form.submit_date} onChange={set('submit_date')} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>최종 근무일</label><input style={field} type="date" required value={form.last_day} onChange={set('last_day')} /></div>
         </div>
-        <label style={lbl}>상태</label>
-        <select style={field} value={form.status} onChange={set('status')}>
-          <option value="진행중">진행중</option><option value="완료">완료</option>
-        </select>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
+          상태는 최종 근무일이 지나면 자동으로 "완료"로 표시돼요 — 따로 입력할 필요 없어요.
+        </div>
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btnGhost} onClick={onClose}>취소</button>

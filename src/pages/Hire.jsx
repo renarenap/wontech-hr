@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, B, Y, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
-import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { Bd, Check, DdayBd, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, dDayFrom, groupByMonth, monthLabel, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 const CHECK_FIELDS = [
   ['offer_sent', '오퍼레터 발송'],
@@ -70,34 +70,37 @@ export default function Hire({ hideAdd = false }) {
       ]} />
       <div style={{ display: 'grid', gridTemplateColumns: s ? '1fr 1fr' : '1fr', gap: 16 }}>
         <div style={crd}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>입사 예정자</div>
-          {hires.length === 0 ? <EmptyState /> : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['이름', '위치', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>
-                {hires.map((h) => {
-                  const st = stCfg[h.status] || { c: '#64748b', bg: '#f1f5f9' }
-                  return (
-                    <tr key={h.id} style={{ cursor: 'pointer', background: sel === h.id ? '#FFF5F0' : 'transparent' }}
-                      onClick={() => setSel(h.id === sel ? null : h.id)}
-                      onMouseEnter={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = '#f8fafc' }}
-                      onMouseLeave={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = 'transparent' }}>
-                      <td style={{ ...tdS, fontWeight: 600 }}>{h.name}</td>
-                      <td style={tdS}><LocationBadges locations={h.locations} /></td>
-                      <td style={{ ...tdS, color: '#64748b' }}>{orgPath(h)}</td>
-                      <td style={tdS}>{h.rank}</td>
-                      <td style={tdS}><Bd color="#475569" bg="#f1f5f9">{h.hire_type}</Bd></td>
-                      <td style={tdS}>{h.join_date}</td>
-                      <td style={tdS}><DdayBd d={h.dDay} /></td>
-                      <td style={tdS}><Bd color={st.c} bg={st.bg}>{h.status}</Bd></td>
-                      <td style={tdS}><Prog current={h.done} max={h.total} /></td>
-                      <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(h) }}>삭제</button></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>입사 예정자 (입사일 월별)</div>
+          {hires.length === 0 ? <EmptyState /> : groupByMonth(hires, 'join_date').map(([mkey, rows]) => (
+            <div key={mkey} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>{monthLabel(mkey)} ({rows.length}명)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['이름', '위치', '소속', '직급', '채용유형', '입사일', 'D-Day', '상태', '준비율', ''].map((h) => <th key={h} style={thS}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {rows.map((h) => {
+                    const st = stCfg[h.status] || { c: '#64748b', bg: '#f1f5f9' }
+                    return (
+                      <tr key={h.id} style={{ cursor: 'pointer', background: sel === h.id ? '#FFF5F0' : 'transparent' }}
+                        onClick={() => setSel(h.id === sel ? null : h.id)}
+                        onMouseEnter={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = '#f8fafc' }}
+                        onMouseLeave={(ev) => { if (sel !== h.id) ev.currentTarget.style.background = 'transparent' }}>
+                        <td style={{ ...tdS, fontWeight: 600 }}>{h.name}</td>
+                        <td style={tdS}><LocationBadges locations={h.locations} /></td>
+                        <td style={{ ...tdS, color: '#64748b' }}>{orgPath(h)}</td>
+                        <td style={tdS}>{h.rank}</td>
+                        <td style={tdS}><Bd color="#475569" bg="#f1f5f9">{h.hire_type}</Bd></td>
+                        <td style={tdS}>{h.join_date}</td>
+                        <td style={tdS}><DdayBd d={h.dDay} /></td>
+                        <td style={tdS}><Bd color={st.c} bg={st.bg}>{h.status}</Bd></td>
+                        <td style={tdS}><Prog current={h.done} max={h.total} /></td>
+                        <td style={tdS}><button style={{ ...btnGhost, padding: '4px 9px', fontSize: 11 }} onClick={(e) => { e.stopPropagation(); remove(h) }}>삭제</button></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
         {s && (
           <div style={crd}>
