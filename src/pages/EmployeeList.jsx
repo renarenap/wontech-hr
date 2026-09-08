@@ -39,6 +39,7 @@ const CSV_COLUMNS = [
   { key: 'dept', label: ORG_LEVEL_LABEL.dept },
   { key: 'team', label: ORG_LEVEL_LABEL.team },
   { key: 'rank', label: '직급' },
+  { key: 'role', label: '직책(팀장·본부장·부문장 등, 없으면 비워두세요)' },
   { key: 'track', label: '직군(사무/사무외국어필수/연구/임원)' },
   { key: 'level', label: '연차' },
   { key: 'leaveMonths', label: '휴직개월수(요율은 기준값 설정 참고, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
@@ -57,7 +58,7 @@ const CSV_COLUMNS = [
   { key: 'tech_pts', label: '(참고)기술성과가점 — 상세화면 "기술성과"에서 건별 등록' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'cn_pts', 'cn_lifetime', 'jp_pts', 'jp_lifetime', 'award_pts', 'note_flag']
+const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'role', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'cn_pts', 'cn_lifetime', 'jp_pts', 'jp_lifetime', 'award_pts', 'note_flag']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'cn_lifetime', 'jp_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'cn_pts', 'jp_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -787,6 +788,7 @@ function buildPatch(raw) {
     dept: ((ORG_LEVEL_LABEL.dept in raw ? raw[ORG_LEVEL_LABEL.dept] : raw['팀']) || '').trim() || null,
     team: ((ORG_LEVEL_LABEL.team in raw ? raw[ORG_LEVEL_LABEL.team] : raw['파트']) || '').trim() || null,
     rank: (raw['직급'] || '').trim(),
+    role: pickByPrefix(raw, '직책(').trim() || null,
     // "임원"은 실제 DB엔 없는 값(임원 여부는 직급으로 자동 판단) — CSV에서만 편의상 받아주고 사무로 정규화.
     // "사무영어필수"는 예전 값(사무외국어필수로 개명됨) — 예전에 받아둔 CSV를 올려도 되게 자동 변환.
     track: (() => {

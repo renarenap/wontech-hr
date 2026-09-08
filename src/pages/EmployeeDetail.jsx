@@ -160,7 +160,10 @@ export default function EmployeeDetail() {
           <SB status={view.status} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
-          <div><div style={fl}>직급</div><div style={fv}>{view.rank} {view.effectiveLevel}</div></div>
+          <div>
+            <div style={fl}>직급</div>
+            <div style={fv}>{view.rank} {view.effectiveLevel}{view.role && <span style={{ color: '#94a3b8', fontWeight: 600 }}> · {view.role}</span>}</div>
+          </div>
           <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[view.track] || view.track}</div></div>
           {view.hasCriteria ? (
             <>
@@ -363,6 +366,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     dept: e.dept || '',
     team: e.team || '',
     rank: e.rank || '',
+    role: e.role || '',
     track: e.track || '사무',
     level: e.level ?? 0,
     leave_start_date: e.leave_start_date || '',
@@ -393,6 +397,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       dept: form.dept.trim() || null,
       team: form.team.trim() || null,
       rank: form.rank.trim(),
+      role: form.role.trim() || null,
       track: form.track,
       level: Number(form.level) || 0,
       leave_start_date: form.leave_start_date || null,
@@ -435,6 +440,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           </div>
           <div style={{ flex: 1 }}><label style={lbl}>연차</label><input style={field} type="number" value={form.level} onChange={set('level')} /></div>
         </div>
+
+        <label style={lbl}>직책 (팀장·본부장·부문장 등, 없으면 비워두세요)</label>
+        <input style={field} value={form.role} onChange={set('role')} />
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />
