@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
-import { freezePendingBackfill } from '../lib/pendingPoints'
+import { fetchLevelReferenceYear, fetchLatestBumpBatch, applyLevelBump, undoLevelBump } from '../lib/levelBump'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
@@ -255,6 +255,8 @@ export default function EmployeeList() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [showExportImport, setShowExportImport] = useState(false)
   const [showBumpLevel, setShowBumpLevel] = useState(false)
+  const [latestBatch, setLatestBatch] = useState(null) // 되돌리기 버튼을 보여줄지 판단 — 안 되돌린 가장 최근 "연차 일괄 +1" 배치
+  const [undoing, setUndoing] = useState(false)
   const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 부문·본부·팀으로 펼칠지(헤더 토글, 전체 행 공통)
   const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
   const [selectedIds, setSelectedIds] = useState(() => new Set()) // 승진후보 등 골라서 CSV로 다운로드할 때 체크한 행
@@ -299,6 +301,22 @@ export default function EmployeeList() {
     load().catch((err) => { if (!cancelled) setError(err) })
     return () => { cancelled = true }
   }, [refreshKey])
+
+  // "연차 일괄 +1" 되돌리기 버튼을 보여줄지 — 안 되돌린 가장 최근 배치가 있을 때만
+  useEffect(() => { fetchLatestBumpBatch().then(setLatestBatch).catch(() => setLatestBatch(null)) }, [refreshKey])
+
+  const undoBump = async () => {
+    if (!latestBatch) return
+    if (!window.confirm(`${latestBatch.new_reference_year}년도 기준으로 적용했던 연차 일괄 +1을 되돌릴까요? 전 직원 연차가 -1 되고, ${latestBatch.previous_reference_year}년도 기준으로 되돌아갑니다.`)) return
+    setUndoing(true)
+    try {
+      await undoLevelBump(latestBatch, user?.email || null)
+      setRefreshKey((k) => k + 1)
+    } catch (err) {
+      setError(err)
+    }
+    setUndoing(false)
+  }
 
   // 직급/부서/팀 드롭다운 옵션은 현재 선택된 직군 탭 안에서만 뽑아서, 엉뚱한 조합을 고를 수 없게 함
   const scopedByTrack = useMemo(() => {
@@ -399,6 +417,11 @@ export default function EmployeeList() {
         </button>
         <button style={btnGhost} onClick={() => setShowExportImport(true)}>📑 전체 데이터 다운로드 / 업로드</button>
         <button style={btnGhost} onClick={() => setShowBumpLevel(true)}>📅 연차 일괄 +1</button>
+        {latestBatch && (
+          <button style={{ ...btnGhost, color: R }} onClick={undoBump} disabled={undoing}>
+            {undoing ? '되돌리는 중…' : `↩ 연차 일괄+1 되돌리기 (${latestBatch.new_reference_year}년도)`}
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <button
@@ -579,15 +602,24 @@ export default function EmployeeList() {
 // ═══ 연차 일괄 +1 (매년 1/1 기준, 특수 조정된 개별 연차는 그대로 두고 전 직원 일괄 +1) ═══
 // 연차가 마이너스→플러스로 넘어가는 사람은 그 직전 평가+경력인정 포인트를 자동으로 얼려서(보류 포인트)
 // 담당자가 상세화면에서 수동으로 반영여부·반영포인트를 정하기 전까진 총점에 안 들어가게 함.
+// 지금 데이터가 몇 년도 기준인지(level_reference_year)를 추적해서, 이미 그 해로 넘어간 뒤인지
+// 아직 그 해가 안 됐는데 미리 누르는 건지 구분해 경고 문구를 다르게 보여줌.
 function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
   const [applying, setApplying] = useState(false)
   const [done, setDone] = useState(null)
   const [error, setError] = useState('')
-  const [criteria, setCriteria] = useState(null) // { rankCriteria, leaveRate } — 얼릴 포인트를 "새 연차 기준"으로 다시 계산하는 데 씀
+  const [criteria, setCriteria] = useState(null) // { rankCriteria, leaveRate, referenceYear }
 
   useEffect(() => {
-    Promise.all([fetchRankCriteria(), fetchLeaveRate()]).then(([rankCriteria, leaveRate]) => setCriteria({ rankCriteria, leaveRate }))
+    Promise.all([fetchRankCriteria(), fetchLeaveRate(), fetchLevelReferenceYear()])
+      .then(([rankCriteria, leaveRate, referenceYear]) => setCriteria({ rankCriteria, leaveRate, referenceYear }))
   }, [])
+
+  const nowYear = new Date().getFullYear()
+  const newYear = criteria ? criteria.referenceYear + 1 : null
+  // 지금 연도가 이미 새 기준년도를 넘어섰으면(=정상적으로 새해가 지나서 누르는 경우) 순한 확인 문구,
+  // 아직 안 지났으면(=기준년도를 착각했거나 너무 일찍 누른 경우) 한 번 더 재확인시키는 문구
+  const isNormalTiming = criteria && nowYear >= newYear
 
   // 연차<=1일 땐 evalPts·backfillPts가 이미 항상 0이라(마이너스 연차 조정과 동일한 안전장치), 얼려야 할
   // "보류 포인트"는 예전(마이너스) 연차가 아니라 +1된 새 연차 기준으로 다시 계산해야 실제 위험 금액이 나옴 —
@@ -609,14 +641,9 @@ function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
     setApplying(true)
     setError('')
     try {
-      for (const p of preview) {
-        const { error: err } = await supabase.from('employees').update({ level: p.newLevel }).eq('id', p.id)
-        if (err) throw new Error(`${p.name}: ${err.message}`)
-        if (p.transitioning) {
-          await freezePendingBackfill(p.id, p.heldPoints, changedBy)
-        }
-      }
-      setDone({ total: preview.length, transitioned: transitioningList.length })
+      const items = preview.map((p) => ({ employeeId: p.id, oldLevel: p.oldLevel, newLevel: p.newLevel, freeze: p.transitioning ? p.heldPoints : null }))
+      await applyLevelBump(items, criteria.referenceYear, newYear, changedBy)
+      setDone({ total: preview.length, transitioned: transitioningList.length, newYear })
     } catch (err) {
       setError(err.message)
     }
@@ -628,7 +655,7 @@ function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
       {done ? (
         <div>
           <div style={{ fontSize: 13, color: '#166534', marginBottom: 16 }}>
-            {done.total}명의 연차가 +1 됐어요. {done.transitioned > 0 && `그 중 ${done.transitioned}명은 마이너스→플러스로 넘어가며 보류 포인트 처리됐어요 — 각자 상세화면 "⏸ 보류 포인트 처리"에서 확인해주세요.`}
+            {done.total}명의 연차가 +1 됐어요 ({done.newYear}년도 기준 적용). {done.transitioned > 0 && `그 중 ${done.transitioned}명은 마이너스→플러스로 넘어가며 보류 포인트 처리됐어요 — 각자 상세화면 "⏸ 보류 포인트 처리"에서 확인해주세요.`}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button style={btnPrimary} onClick={onApplied}>확인</button>
@@ -638,8 +665,18 @@ function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
         <Loading />
       ) : (
         <div>
+          {isNormalTiming ? (
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16, lineHeight: 1.6 }}>
+              지금 데이터는 <b>{criteria.referenceYear}년도</b> 기준이에요. 연차 일괄 +1을 하면 <b>{newYear}년도</b> 기준이 적용됩니다. 그래도 +1 하시겠습니까?
+            </div>
+          ) : (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: 12, marginBottom: 16, fontSize: 12, color: '#991b1b', lineHeight: 1.6 }}>
+              ⚠️ 지금 데이터는 <b>{criteria.referenceYear}년도</b> 기준인데, 아직 {nowYear}년이라 {newYear}년도로 넘어가기엔 이른 것 같아요.
+              연차 일괄 +1을 하면 <b>{newYear}년도</b> 기준이 적용됩니다. 기준년도를 재확인해주세요. 그래도 +1 하시겠습니까?
+            </div>
+          )}
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16, lineHeight: 1.6 }}>
-            전 직원 {preview.length}명의 연차가 전부 +1 됩니다 (개별 특수조정 연차 포함, 전부 그대로 +1). 되돌릴 수 없으니 아래 내용 확인 후 진행해주세요.
+            전 직원 {preview.length}명의 연차가 전부 +1 됩니다 (개별 특수조정 연차 포함, 전부 그대로 +1). 실행 후 "↩ 마지막 연차+1 되돌리기"로 되돌릴 수 있어요.
           </div>
           {transitioningList.length > 0 && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: 12, marginBottom: 16 }}>
@@ -660,7 +697,7 @@ function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" style={btnGhost} onClick={onClose} disabled={applying}>취소</button>
             <button type="button" style={btnPrimary} onClick={apply} disabled={applying}>
-              {applying ? '처리 중…' : `${preview.length}명 전체 +1 적용`}
+              {applying ? '처리 중…' : `그래도 ${preview.length}명 전체 +1 적용`}
             </button>
           </div>
         </div>

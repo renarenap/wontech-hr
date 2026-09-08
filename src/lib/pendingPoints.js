@@ -30,21 +30,9 @@ export async function fetchPendingPointLog(employeeId) {
   return data || []
 }
 
-// 연차 일괄 +1 처리 중 마이너스→플러스로 넘어가는 사람에게 호출 — 그 직전(구 연차 기준) 평가+경력인정
-// 포인트를 얼려서 저장하고, 이력에 frozen 이벤트를 남김
-export async function freezePendingBackfill(employeeId, heldPoints, changedBy) {
-  const held = Math.round((heldPoints || 0) * 10) / 10
-  const { error: e1 } = await supabase.from('employees').update({
-    has_pending_backfill: true, pending_points: held, pending_resolved: false, pending_release_points: 0,
-  }).eq('id', employeeId)
-  if (e1) throw e1
-  const { error: e2 } = await supabase.from('pending_point_log').insert({
-    employee_id: employeeId, event_type: 'frozen', held_points: held, changed_by: changedBy,
-  })
-  if (e2) throw e2
-}
-
 // 담당자가 상세화면에서 반영여부/반영포인트를 저장할 때 호출
+// (얼리는 동작 자체는 src/lib/levelBump.js의 applyLevelBump에서 처리 — 되돌리기 때 필요한
+// pending_point_log 행의 id를 그 자리에서 바로 받아야 해서 거기 직접 넣어둠)
 export async function resolvePendingBackfill(employeeId, resolved, releasePoints, changedBy) {
   const release = Math.round((Number(releasePoints) || 0) * 10) / 10
   const { error: e1 } = await supabase.from('employees').update({

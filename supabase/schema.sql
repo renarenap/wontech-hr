@@ -119,13 +119,37 @@ create table if not exists rank_criteria (
   updated_at timestamptz default now()
 );
 
--- 직급과 무관한 전역 설정값(싱글턴, id=1 고정) — 지금은 휴직 요율만 있음
+-- 직급과 무관한 전역 설정값(싱글턴, id=1 고정)
 create table if not exists point_settings (
   id int primary key default 1,
   leave_rate_per_year numeric not null default 6,  -- 휴직 1년당 인정 포인트
+  level_reference_year int not null default 2026,  -- 지금 연차(level) 데이터가 몇 년도 기준인지 — "연차 일괄 +1" 실행 시 +1됨
   updated_at timestamptz default now(),
   constraint point_settings_single_row check (id = 1)
 );
+
+-- "연차 일괄 +1" 실행 이력 — 배치 하나당 한 행, 되돌리기는 가장 최근의 안 되돌려진 배치를 되돌림
+create table if not exists level_bump_batches (
+  id uuid primary key default gen_random_uuid(),
+  previous_reference_year int not null,
+  new_reference_year int not null,
+  applied_by text,
+  applied_at timestamptz default now(),
+  undone_at timestamptz,
+  undone_by text
+);
+
+-- 배치 안에서 사람별 변경 내역(되돌릴 때 old_level로 복원) + 이 배치에서 새로 얼려진 보류 포인트가 있으면
+-- 그 pending_point_log 행을 가리켜서, 되돌릴 때(그 사이 담당자가 이미 처리하지 않았다면) 같이 정리함
+create table if not exists level_bump_items (
+  id uuid primary key default gen_random_uuid(),
+  batch_id uuid references level_bump_batches(id) on delete cascade,
+  employee_id uuid references employees(id) on delete cascade,
+  old_level numeric not null,
+  new_level numeric not null,
+  pending_log_id uuid references pending_point_log(id)
+);
+create index if not exists level_bump_items_batch_id_idx on level_bump_items(batch_id);
 
 -- 평가 이력 (반기/연간 등급)
 create table if not exists evaluations (
@@ -270,6 +294,9 @@ alter table eval_comments enable row level security;
 alter table note_entries enable row level security;
 alter table cert_entries enable row level security;
 alter table tech_entries enable row level security;
+alter table pending_point_log enable row level security;
+alter table level_bump_batches enable row level security;
+alter table level_bump_items enable row level security;
 alter table onboarding enable row level security;
 alter table onboarding_tasks enable row level security;
 alter table hires enable row level security;
@@ -312,7 +339,8 @@ declare
   t text;
 begin
   for t in select unnest(array[
-    'employees','employees_archive','evaluations','eval_comments','note_entries','cert_entries','tech_entries','onboarding','onboarding_tasks',
+    'employees','employees_archive','evaluations','eval_comments','note_entries','cert_entries','tech_entries',
+    'pending_point_log','level_bump_batches','level_bump_items','onboarding','onboarding_tasks',
     'hires','resignations','transfers','recruit_positions','recruit_candidates'
   ])
   loop
