@@ -198,6 +198,8 @@ export default function HireResign() {
 // ═══ 입사자 등록 ═══
 function QuickAddHireModal({ onClose, onCreated }) {
   const [depts, setDepts] = useState([])
+  const [divisions, setDivisions] = useState([])
+  const [teams, setTeams] = useState([])
   const [name, setName] = useState('')
   const [locations, setLocations] = useState([])
   const [division, setDivision] = useState('')
@@ -214,11 +216,13 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('employees').select('dept').then(({ data }) => {
-      // 조직도 기준 파트 목록 + 실제 employees 데이터에 있는 부서를 합쳐서 보여줌
-      const live = (data || []).map((d) => d.dept).filter(Boolean)
-      const uniq = [...new Set([...DEPT_OPTIONS, ...live])].sort((a, b) => a.localeCompare(b, 'ko'))
-      setDepts(uniq)
+    supabase.from('employees').select('division, dept, team').then(({ data }) => {
+      // 본부는 조직도 기준 목록 + 실제 데이터를 합쳐서 드롭다운으로, 부문·팀은 실제 데이터에 있는 값만 자동완성으로 보여줌
+      const rows = data || []
+      const liveDept = rows.map((r) => r.dept).filter(Boolean)
+      setDepts([...new Set([...DEPT_OPTIONS, ...liveDept])].sort((a, b) => a.localeCompare(b, 'ko')))
+      setDivisions([...new Set(rows.map((r) => r.division).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')))
+      setTeams([...new Set(rows.map((r) => r.team).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')))
     })
   }, [])
 
@@ -259,7 +263,13 @@ function QuickAddHireModal({ onClose, onCreated }) {
         <LocationPicker value={locations} onChange={setLocations} />
 
         <label style={lbl}>{ORG_LEVEL_LABEL.division}</label>
-        <input style={field} placeholder="예: 영업부문 (없으면 비워두세요)" value={division} onChange={(e) => setDivision(e.target.value)} />
+        <input
+          style={field} list="division-options" placeholder="예: 영업부문 (없으면 비워두세요)"
+          value={division} onChange={(e) => setDivision(e.target.value)}
+        />
+        <datalist id="division-options">
+          {divisions.map((d) => <option key={d} value={d} />)}
+        </datalist>
 
         <label style={lbl}>{ORG_LEVEL_LABEL.dept}</label>
         <select style={field} required value={dept} onChange={(e) => setDept(e.target.value)}>
@@ -272,7 +282,13 @@ function QuickAddHireModal({ onClose, onCreated }) {
         )}
 
         <label style={lbl}>{ORG_LEVEL_LABEL.team}</label>
-        <input style={field} placeholder="예: 해외CS팀 (없으면 비워두세요)" value={team} onChange={(e) => setTeam(e.target.value)} />
+        <input
+          style={field} list="team-options" placeholder="예: 해외CS팀 (없으면 비워두세요)"
+          value={team} onChange={(e) => setTeam(e.target.value)}
+        />
+        <datalist id="team-options">
+          {teams.map((t) => <option key={t} value={t} />)}
+        </datalist>
 
         <label style={lbl}>입사일</label>
         <input style={field} type="date" required value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
