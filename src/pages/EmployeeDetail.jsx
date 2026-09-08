@@ -160,7 +160,7 @@ export default function EmployeeDetail() {
           <SB status={view.status} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16 }}>
-          <div><div style={fl}>직급</div><div style={fv}>{view.rank}</div></div>
+          <div><div style={fl}>직급</div><div style={fv}>{view.rank} {view.effectiveLevel}</div></div>
           <div><div style={fl}>직군</div><div style={fv}>{TRACK_LABEL[view.track] || view.track}</div></div>
           {view.hasCriteria ? (
             <>

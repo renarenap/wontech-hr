@@ -68,12 +68,18 @@ export function TenureBar({ level, reqTenure }) {
   if (!reqTenure || reqTenure <= 0) return <span style={{ fontSize: 11, color: '#94a3b8' }}>해당없음</span>
   const lvl = level || 0
   const met = lvl >= reqTenure
-  const filled = Math.min(lvl, reqTenure)
+  const filled = Math.min(Math.max(lvl, 0), reqTenure)
   const overflow = Math.max(0, lvl - reqTenure)
   const color = met ? G : Y
+  // 마이너스 연차는 정규 칸(reqTenure) 앞에 부족분만큼 희미한 점선 칸으로 따로 보여주고,
+  // 정규 칸은 그 마이너스가 0을 넘어선 뒤부터(즉 lvl이 양수가 된 뒤부터) 채워지기 시작함
+  const deficit = lvl < 0 ? Math.ceil(-lvl) : 0
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ display: 'flex', gap: 2 }}>
+        {deficit > 0 && Array.from({ length: deficit }).map((_, i) => (
+          <div key={`d${i}`} style={{ width: 12, height: 10, borderRadius: 2, border: '1px dashed #cbd5e1' }} />
+        ))}
         {Array.from({ length: reqTenure }).map((_, i) => (
           <div key={i} style={{ width: 12, height: 10, borderRadius: 2, background: i < filled ? color : '#e5e7eb' }} />
         ))}
