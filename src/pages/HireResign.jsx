@@ -44,13 +44,14 @@ async function addHireToRoster({ name, division = null, dept, team = null, locat
 // ═══ 공용 로직: employees_archive로 스냅샷 이동 후 employees에서 제거 ═══
 async function resignEmployee(picked, lastDay) {
   const [{ data: evals, error: e1 }, { data: transfers, error: e0 }, { data: comments, error: ec }, { data: notes, error: en },
-    { data: certs, error: ecert }, { data: techs, error: etech }] = await Promise.all([
+    { data: certs, error: ecert }, { data: techs, error: etech }, { data: pendingLog, error: epending }] = await Promise.all([
     supabase.from('evaluations').select('*').eq('employee_id', picked.id),
     supabase.from('transfers').select('id').eq('employee_id', picked.id),
     supabase.from('eval_comments').select('*').eq('employee_id', picked.id),
     supabase.from('note_entries').select('*').eq('employee_id', picked.id),
     supabase.from('cert_entries').select('*').eq('employee_id', picked.id),
     supabase.from('tech_entries').select('*').eq('employee_id', picked.id),
+    supabase.from('pending_point_log').select('*').eq('employee_id', picked.id),
   ])
   if (e1) throw new Error(e1.message)
   if (e0) throw new Error(e0.message)
@@ -58,6 +59,7 @@ async function resignEmployee(picked, lastDay) {
   if (en) throw new Error(en.message)
   if (ecert) throw new Error(ecert.message)
   if (etech) throw new Error(etech.message)
+  if (epending) throw new Error(epending.message)
 
   const { error: e2 } = await supabase.from('employees_archive').insert({
     original_id: picked.id, name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
@@ -65,9 +67,11 @@ async function resignEmployee(picked, lastDay) {
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, cn_pts: picked.cn_pts, jp_pts: picked.jp_pts, cert_pts: picked.cert_pts, tech_pts: picked.tech_pts, award_pts: picked.award_pts,
     eng_lifetime: picked.eng_lifetime, cn_lifetime: picked.cn_lifetime, jp_lifetime: picked.jp_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
     leave_years: picked.leave_years, note: picked.note, note_flag: picked.note_flag,
+    has_pending_backfill: picked.has_pending_backfill, pending_points: picked.pending_points,
+    pending_resolved: picked.pending_resolved, pending_release_points: picked.pending_release_points,
     join_date: picked.join_date, leave_start_date: picked.leave_start_date, leave_end_date: picked.leave_end_date,
     evaluations_snapshot: evals || [], eval_comments_snapshot: comments || [], note_entries_snapshot: notes || [],
-    cert_entries_snapshot: certs || [], tech_entries_snapshot: techs || [],
+    cert_entries_snapshot: certs || [], tech_entries_snapshot: techs || [], pending_point_log_snapshot: pendingLog || [],
     transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
   })
   if (e2) throw new Error(e2.message)
@@ -94,6 +98,8 @@ async function restoreEmployee(archived) {
     base_pts: archived.base_pts, eng_pts: archived.eng_pts, cn_pts: archived.cn_pts, jp_pts: archived.jp_pts, cert_pts: archived.cert_pts, tech_pts: archived.tech_pts, award_pts: archived.award_pts,
     eng_lifetime: archived.eng_lifetime, cn_lifetime: archived.cn_lifetime, jp_lifetime: archived.jp_lifetime, backfill_full_tenure: archived.backfill_full_tenure,
     leave_years: archived.leave_years || 0, note: archived.note, note_flag: archived.note_flag || 'o',
+    has_pending_backfill: !!archived.has_pending_backfill, pending_points: archived.pending_points,
+    pending_resolved: !!archived.pending_resolved, pending_release_points: archived.pending_release_points || 0,
     join_date: archived.join_date, leave_start_date: archived.leave_start_date, leave_end_date: archived.leave_end_date,
   }
   if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
@@ -139,6 +145,17 @@ async function restoreEmployee(archived) {
       techSnapshot.map((t) => ({ category: t.category, name: t.name, achieved_date: t.achieved_date, points: t.points, employee_id: emp.id }))
     )
     if (e8) throw new Error(e8.message)
+  }
+
+  const pendingLogSnapshot = archived.pending_point_log_snapshot || []
+  if (pendingLogSnapshot.length > 0) {
+    const { error: e9 } = await supabase.from('pending_point_log').insert(
+      pendingLogSnapshot.map((p) => ({
+        event_type: p.event_type, held_points: p.held_points, release_points: p.release_points,
+        resolved: p.resolved, changed_by: p.changed_by, employee_id: emp.id,
+      }))
+    )
+    if (e9) throw new Error(e9.message)
   }
 
   // 퇴사 시점에 저장해둔 발령(transfers) 기록을 복구된 프로필에 다시 연결

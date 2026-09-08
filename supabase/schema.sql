@@ -42,6 +42,12 @@ create table if not exists employees (
   note text,                    -- (레거시) 비고 자유메모 단일 텍스트 — note_entries로 대체됨, 과거 호환용으로만 보존
   note_flag text not null default 'o' check (note_flag in ('+','-','o')),  -- 비고 요약값: +긍정/-부정(근태 등 문제)/o없음, 목록에 배지로 표시
   eval_comment_2025 text,       -- (레거시) 2025년도 평가결과 코멘트 단일 텍스트 — eval_comments로 대체됨, 과거 CSV 호환용으로만 보존
+  -- 마이너스 연차 조정/보류 포인트 처리 (연차가 마이너스→플러스로 넘어가는 순간, 그 직전 평가+경력인정
+  -- 포인트를 자동으로 반영하지 않고 얼려서 담당자 수동 승인을 받게 함 — 상세 스펙은 pending_point_log 참고)
+  has_pending_backfill boolean not null default false,
+  pending_points numeric,              -- 얼린 시점의 평가+경력인정 포인트 합계(원본, 불변)
+  pending_resolved boolean not null default false,   -- 반영 여부 체크박스
+  pending_release_points numeric not null default 0, -- 반영 포인트(자유 입력)
   created_at timestamptz default now()
 );
 
@@ -90,6 +96,19 @@ create table if not exists tech_entries (
   created_at timestamptz default now()
 );
 create index if not exists tech_entries_employee_id_idx on tech_entries(employee_id);
+
+-- 보류 포인트 처리 이력(감사용) — 얼려질 때(frozen) 한 번, 반영여부/반영포인트를 바꿔 저장할 때(resolved)마다 추가
+create table if not exists pending_point_log (
+  id uuid primary key default gen_random_uuid(),
+  employee_id uuid references employees(id) on delete cascade,
+  event_type text not null check (event_type in ('frozen','resolved')),
+  held_points numeric,      -- frozen 이벤트: 그 시점 평가+경력인정 포인트 합계
+  release_points numeric,   -- resolved 이벤트: 그때 입력한 반영 포인트
+  resolved boolean,         -- resolved 이벤트: 그때 체크 상태
+  changed_by text,          -- 처리자(로그인 이메일)
+  created_at timestamptz default now()
+);
+create index if not exists pending_point_log_employee_id_idx on pending_point_log(employee_id);
 
 -- 직급별 승진 기준 파라미터 (하드코딩 대신 이 테이블로 관리 — '기준값 설정' 화면에서 편집)
 create table if not exists rank_criteria (

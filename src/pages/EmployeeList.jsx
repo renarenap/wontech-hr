@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useAuth } from '../lib/auth'
 import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
+import { freezePendingBackfill } from '../lib/pendingPoints'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
 
@@ -217,6 +219,7 @@ function StatusFilterDropdown({ value, onChange }) {
 
 export default function EmployeeList() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [employees, setEmployees] = useState(null)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
@@ -251,6 +254,7 @@ export default function EmployeeList() {
   const [sortAsc, setSortAsc] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showExportImport, setShowExportImport] = useState(false)
+  const [showBumpLevel, setShowBumpLevel] = useState(false)
   const [orgExpanded, setOrgExpanded] = useState(false) // 소속 컬럼 전체를 부문·본부·팀으로 펼칠지(헤더 토글, 전체 행 공통)
   const [historyExpanded, setHistoryExpanded] = useState(false) // 평가이력 컬럼 전체를 전체 이력+경력인정P로 펼칠지(헤더 토글, 전체 행 공통)
   const [selectedIds, setSelectedIds] = useState(() => new Set()) // 승진후보 등 골라서 CSV로 다운로드할 때 체크한 행
@@ -394,6 +398,7 @@ export default function EmployeeList() {
           ⬇ 선택 항목 다운로드 ({selectedList.length}명)
         </button>
         <button style={btnGhost} onClick={() => setShowExportImport(true)}>📑 전체 데이터 다운로드 / 업로드</button>
+        <button style={btnGhost} onClick={() => setShowBumpLevel(true)}>📅 연차 일괄 +1</button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
         <button
@@ -559,7 +564,108 @@ export default function EmployeeList() {
           onApplied={() => { setShowExportImport(false); setRefreshKey((k) => k + 1) }}
         />
       )}
+      {showBumpLevel && (
+        <BumpLevelModal
+          employees={employees}
+          changedBy={user?.email || null}
+          onClose={() => setShowBumpLevel(false)}
+          onApplied={() => { setShowBumpLevel(false); setRefreshKey((k) => k + 1) }}
+        />
+      )}
     </div>
+  )
+}
+
+// ═══ 연차 일괄 +1 (매년 1/1 기준, 특수 조정된 개별 연차는 그대로 두고 전 직원 일괄 +1) ═══
+// 연차가 마이너스→플러스로 넘어가는 사람은 그 직전 평가+경력인정 포인트를 자동으로 얼려서(보류 포인트)
+// 담당자가 상세화면에서 수동으로 반영여부·반영포인트를 정하기 전까진 총점에 안 들어가게 함.
+function BumpLevelModal({ employees, changedBy, onClose, onApplied }) {
+  const [applying, setApplying] = useState(false)
+  const [done, setDone] = useState(null)
+  const [error, setError] = useState('')
+  const [criteria, setCriteria] = useState(null) // { rankCriteria, leaveRate } — 얼릴 포인트를 "새 연차 기준"으로 다시 계산하는 데 씀
+
+  useEffect(() => {
+    Promise.all([fetchRankCriteria(), fetchLeaveRate()]).then(([rankCriteria, leaveRate]) => setCriteria({ rankCriteria, leaveRate }))
+  }, [])
+
+  // 연차<=1일 땐 evalPts·backfillPts가 이미 항상 0이라(마이너스 연차 조정과 동일한 안전장치), 얼려야 할
+  // "보류 포인트"는 예전(마이너스) 연차가 아니라 +1된 새 연차 기준으로 다시 계산해야 실제 위험 금액이 나옴 —
+  // 그 새 연차에서 지금까지의 실제 평가이력이 갑자기 다 인정되면서 튀어오르는 금액이 바로 그거라서.
+  const preview = !criteria ? [] : employees.map((e) => {
+    const oldLevel = e.level || 0
+    const newLevel = oldLevel + 1
+    const transitioning = oldLevel < 0 && newLevel >= 0
+    let heldPoints = 0
+    if (transitioning) {
+      const projected = deriveEmployee({ ...e, level: newLevel }, e.history, criteria.rankCriteria, criteria.leaveRate)
+      heldPoints = Math.round(((projected.evalPts || 0) + (projected.backfillPts || 0)) * 10) / 10
+    }
+    return { id: e.id, name: e.name, oldLevel, newLevel, transitioning, heldPoints }
+  })
+  const transitioningList = preview.filter((p) => p.transitioning)
+
+  const apply = async () => {
+    setApplying(true)
+    setError('')
+    try {
+      for (const p of preview) {
+        const { error: err } = await supabase.from('employees').update({ level: p.newLevel }).eq('id', p.id)
+        if (err) throw new Error(`${p.name}: ${err.message}`)
+        if (p.transitioning) {
+          await freezePendingBackfill(p.id, p.heldPoints, changedBy)
+        }
+      }
+      setDone({ total: preview.length, transitioned: transitioningList.length })
+    } catch (err) {
+      setError(err.message)
+    }
+    setApplying(false)
+  }
+
+  return (
+    <Modal title="연차 일괄 +1" onClose={onClose} width={560}>
+      {done ? (
+        <div>
+          <div style={{ fontSize: 13, color: '#166534', marginBottom: 16 }}>
+            {done.total}명의 연차가 +1 됐어요. {done.transitioned > 0 && `그 중 ${done.transitioned}명은 마이너스→플러스로 넘어가며 보류 포인트 처리됐어요 — 각자 상세화면 "⏸ 보류 포인트 처리"에서 확인해주세요.`}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button style={btnPrimary} onClick={onApplied}>확인</button>
+          </div>
+        </div>
+      ) : !criteria ? (
+        <Loading />
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16, lineHeight: 1.6 }}>
+            전 직원 {preview.length}명의 연차가 전부 +1 됩니다 (개별 특수조정 연차 포함, 전부 그대로 +1). 되돌릴 수 없으니 아래 내용 확인 후 진행해주세요.
+          </div>
+          {transitioningList.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#854d0e', marginBottom: 8 }}>
+                마이너스→플러스로 넘어가며 보류 포인트 처리되는 사람 ({transitioningList.length}명)
+              </div>
+              <div style={{ maxHeight: 180, overflow: 'auto' }}>
+                {transitioningList.map((p) => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#854d0e', padding: '3px 0' }}>
+                    <span>{p.name} ({p.oldLevel} → {p.newLevel})</span>
+                    <span>보류 {p.heldPoints}P</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" style={btnGhost} onClick={onClose} disabled={applying}>취소</button>
+            <button type="button" style={btnPrimary} onClick={apply} disabled={applying}>
+              {applying ? '처리 중…' : `${preview.length}명 전체 +1 적용`}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 

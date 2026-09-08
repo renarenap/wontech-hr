@@ -1,6 +1,7 @@
 // ═══ 승진포인트 계산 로직 (rank_criteria 파라미터 테이블 기반, 하드코딩 없음) ═══
 import { supabase } from '../supabaseClient'
 import { OFFICE_RANKS, RESEARCH_RANKS, sortByPeriod, baseRank } from './constants'
+import { minusYearAdjustment, pendingBackfillAdjustment } from './pendingPoints'
 
 const TRACKED_RANKS = new Set([...OFFICE_RANKS, ...RESEARCH_RANKS])
 
@@ -121,7 +122,15 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   // 어학은 그와 별개로 사무직(외국어필수) 과장·차장의 필수요건 충족 여부(engGated/engOk) 판단에도 계속 쓰임 — 둘이 겹쳐도 무방
   const addPts = (employee.cert_pts || 0) + (employee.tech_pts || 0) + (employee.award_pts || 0)
     + (employee.eng_pts || 0) + (employee.cn_pts || 0) + (employee.jp_pts || 0)
-  const currentPts = Math.round((evalPtsSum + backfillPts + leavePts + addPts) * 10) / 10
+
+  // 마이너스 연차 조정 — 연차<0인 동안은 평가+경력인정 포인트를 라이브로 상쇄(그 사람은 원래 승진요건
+  // 자체를 아직 못 채운 상태라 이 두 항목이 총점에 들어가면 안 됨). 연차가 0 이상이 되면 이 라이브
+  // 상쇄는 멈추고, 대신 "연차 일괄 +1" 처리 시점에 얼려둔 값(has_pending_backfill)이 있으면 그걸 담당자가
+  // 수동으로 승인(반영여부·반영포인트)하기 전까진 계속 상쇄된 채로 유지됨 — 일반 직원은 전혀 영향 없음.
+  const level = employee.level || 0
+  const minusYearAdj = level < 0 ? minusYearAdjustment(evalPtsSum, backfillPts) : 0
+  const pendingAdj = level < 0 ? 0 : pendingBackfillAdjustment(employee)
+  const currentPts = Math.round((evalPtsSum + backfillPts + leavePts + addPts + minusYearAdj + pendingAdj) * 10) / 10
 
   const gap = Math.max(0, threshold - currentPts)
   const tenureMet = effectiveLevel >= req_tenure
@@ -156,7 +165,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
 
   return {
     ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
-    leaveYears, leavePts, leaveRate, effectiveLevel, onLeaveNow, addPts, currentPts, gap, evalWindow,
+    leaveYears, leavePts, leaveRate, effectiveLevel, onLeaveNow, addPts, minusYearAdj, pendingAdj, currentPts, gap, evalWindow,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
 }

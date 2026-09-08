@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useAuth } from '../lib/auth'
 import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
+import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
 import { fetchNoteEntries, addNoteEntry, deleteNoteEntry } from '../lib/noteEntries'
 import {
@@ -28,6 +30,9 @@ export default function EmployeeDetail() {
   const [certEntriesError, setCertEntriesError] = useState(null)
   const [techEntries, setTechEntries] = useState(null) // 기술성과 건별 이력 — 상한 적용해 employees.tech_pts로 캐시됨
   const [techEntriesError, setTechEntriesError] = useState(null)
+  const [pendingLog, setPendingLog] = useState(null) // 보류 포인트 처리 이력 — has_pending_backfill인 사람만 의미 있음
+  const [pendingLogError, setPendingLogError] = useState(null)
+  const { user } = useAuth()
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +77,17 @@ export default function EmployeeDetail() {
   }
   useEffect(() => { fetchTechEntries(id).then(setTechEntries).catch((err) => setTechEntriesError(err)) }, [id])
 
+  const reloadPendingLog = () => {
+    fetchPendingPointLog(id).then(setPendingLog).catch((err) => setPendingLogError(err))
+    setRefreshKey((k) => k + 1)
+  }
+  useEffect(() => { reloadPendingLog() }, [id])
+
+  const saveResolution = async (resolved, releasePoints) => {
+    await resolvePendingBackfill(id, resolved, releasePoints, user?.email || null)
+    reloadPendingLog()
+  }
+
   // note_flag(+/-/o 요약)는 employees 테이블 필드라 여기서 바로 업데이트하고, 전체 새로고침(refreshKey)으로 반영
   const updateNoteFlag = async (flag) => {
     const { error: err } = await supabase.from('employees').update({ note_flag: flag }).eq('id', id)
@@ -111,6 +127,10 @@ export default function EmployeeDetail() {
       note: `현재 직급 기준 최근 ${Math.max(0, ((view.level || 0) - 1) * 2)}건(반기 환산)만 반영 — 이전 직급 때 평가나 그 이전 기록은 승진 시 이미 반영된 것으로 보고 제외됩니다.`,
     },
     { l: '경력인정 포인트', v: view.backfillPts || 0, c: P },
+    ...((view.level || 0) < 0 ? [{
+      l: '마이너스연차 조정', v: view.minusYearAdj || 0, c: R,
+      note: '연차가 마이너스인 동안엔 승진요건 자체를 아직 못 채운 상태라 평가·경력인정 포인트를 상쇄해요. 연차가 0 이상이 되면 이 조정은 멈추고, "보류 포인트 처리"로 넘어갑니다.',
+    }] : []),
     { l: '휴직 포인트', v: view.leavePts || 0, c: B },
     { l: '전문/직무 자격 가점', v: view.cert_pts || 0, c: '#6366f1' },
     { l: '기술성과 가점', v: view.tech_pts || 0, c: '#8b5cf6' },
@@ -309,6 +329,13 @@ export default function EmployeeDetail() {
           ))}
         </div>
       </div>
+      )}
+
+      {view.has_pending_backfill && (
+        <PendingBackfillCard
+          pendingPoints={view.pending_points} resolved={view.pending_resolved} releasePoints={view.pending_release_points}
+          log={pendingLog} logError={pendingLogError} onSave={saveResolution}
+        />
       )}
 
       <LanguageSection
@@ -553,6 +580,96 @@ const LANGUAGES = [
   { key: 'cn', label: '중국어' },
   { key: 'jp', label: '일본어' },
 ]
+
+// ═══ 보류 포인트 처리 — "연차 일괄 +1"로 연차가 마이너스→플러스로 넘어간 순간 얼려둔 평가+경력인정
+// 포인트를 담당자가 수동으로 반영여부·반영포인트를 정해서 승인하는 카드. 얼린 원본값(pendingPoints)은
+// 불변이고, 반영여부/반영포인트만 바꿀 수 있음 — 바꿔서 저장할 때마다 이력에 남음(감사용). ═══
+function PendingBackfillCard({ pendingPoints, resolved, releasePoints, log, logError, onSave }) {
+  const initial = { resolved: !!resolved, releasePoints: releasePoints || 0 }
+  const [form, setForm] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => { setForm(initial) }, [resolved, releasePoints]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = form.resolved !== initial.resolved || Number(form.releasePoints) !== Number(initial.releasePoints)
+
+  const save = async () => {
+    setSaving(true); setErr(''); setSaved(false)
+    try {
+      await onSave(form.resolved, Number(form.releasePoints) || 0)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ ...crd, border: `1px solid ${form.resolved ? '#bbf7d0' : '#fde68a'}`, background: form.resolved ? '#f0fdf4' : '#fffbeb' }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>⏸ 보류 포인트 처리</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
+        연차가 마이너스에서 플러스로 넘어간 시점의 평가+경력인정 포인트예요. 자동으로 총점에 안 들어가고,
+        아래에서 반영 여부·반영 포인트를 직접 정해야 총점에 가산돼요.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 11, color: '#64748b' }}>보류 포인트 (원본, 고정값)</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{pendingPoints ?? 0}P</div>
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+          <input type="checkbox" checked={form.resolved} onChange={(ev) => setForm({ ...form, resolved: ev.target.checked })} />
+          반영 여부
+        </label>
+        <div>
+          <label style={{ ...lbl, marginTop: 0 }}>반영 포인트</label>
+          <input
+            style={{ ...field, marginBottom: 0, width: 100 }} type="number" step="0.5"
+            value={form.releasePoints} onChange={(ev) => setForm({ ...form, releasePoints: ev.target.value })}
+          />
+        </div>
+        <button
+          type="button" onClick={save} disabled={!dirty || saving}
+          style={{
+            padding: '7px 16px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: dirty ? 'pointer' : 'default',
+            border: 'none', background: dirty ? P : '#e2e8f0', color: dirty ? '#fff' : '#94a3b8',
+          }}
+        >
+          {saving ? '저장 중…' : '저장'}
+        </button>
+        {saved && <span style={{ color: G, fontSize: 11, fontWeight: 600 }}>✓ 저장됨</span>}
+        {err && <span style={{ color: '#dc2626', fontSize: 11 }}>{err}</span>}
+      </div>
+
+      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>처리 이력</div>
+      {log === null ? (
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>불러오는 중…</div>
+      ) : log.length === 0 ? (
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>이력이 없습니다</div>
+      ) : (
+        <div>
+          {log.map((row) => (
+            <div key={row.id} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+              <div style={{ fontSize: 11, color: '#94a3b8', minWidth: 130, paddingTop: 2 }}>
+                {new Date(row.created_at).toISOString().slice(0, 16).replace('T', ' ')}
+              </div>
+              <div style={{ flex: 1, fontSize: 13, color: '#334155' }}>
+                {row.event_type === 'frozen'
+                  ? `보류 포인트 ${row.held_points}P 얼림`
+                  : `반영 여부 ${row.resolved ? 'O' : 'X'} · 반영 포인트 ${row.release_points}P로 저장`}
+                {row.changed_by && <span style={{ color: '#94a3b8' }}> (처리: {row.changed_by})</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {logError && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>{logError.message}</div>}
+    </div>
+  )
+}
 
 // ═══ 어학 — 영어/중국어/일본어 점수·평생인정 여부. 값을 바꾸면 선택만 되고, "저장"을 눌러야 실제 반영됨.
 // 배점 기준(AL/IH/IM3/IM2/IM1 → 4/3/2/1/0.5P)은 기준표 화면에 참고용으로만 실어두고, 여기선 그냥 결과 점수만 입력받음.
