@@ -1,8 +1,8 @@
 -- 마이너스 연차 조정 + 보류 포인트 처리 (스펙: 마이너스연차 포인트 처리 개발 스펙, 2026-09-08)
 -- Supabase SQL Editor에서 실행하세요.
 
--- 연차가 마이너스→플러스로 넘어가는 "그 순간"(상세화면에서 연차를 고쳐 저장하는 시점)에
--- 그 직전까지의 평가+경력인정 포인트를 얼려서 저장해두는 필드들.
+-- 연차가 마이너스→플러스로 넘어가는 "그 순간"("포인트 현황" 페이지의 "연차 일괄 +1" 실행 시점)에
+-- 새 연차 기준으로 다시 계산한 평가+경력인정 포인트를 얼려서 저장해두는 필드들.
 alter table employees add column if not exists has_pending_backfill boolean not null default false;
 alter table employees add column if not exists pending_points numeric;              -- 얼린 시점의 평가+경력인정 포인트 합계(원본, 불변)
 alter table employees add column if not exists pending_resolved boolean not null default false;  -- 반영 여부 체크박스
