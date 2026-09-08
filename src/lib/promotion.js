@@ -1,6 +1,6 @@
 // ═══ 승진포인트 계산 로직 (rank_criteria 파라미터 테이블 기반, 하드코딩 없음) ═══
 import { supabase } from '../supabaseClient'
-import { OFFICE_RANKS, RESEARCH_RANKS, sortByPeriod } from './constants'
+import { OFFICE_RANKS, RESEARCH_RANKS, sortByPeriod, baseRank } from './constants'
 
 const TRACKED_RANKS = new Set([...OFFICE_RANKS, ...RESEARCH_RANKS])
 
@@ -90,17 +90,18 @@ export function engGateMet(employee) {
 // 직급이라 각자의 트랙(사무/연구) 탭에 그대로 남아있어야 함. TRACKED_RANKS(사원~부장, 연구원~수석연구원)에
 // 없는 직급(이사·상무·대표 등 진짜 임원 + 직급 미확인)만 "임원" 탭으로 분류.
 export const CATEGORIES = [
-  { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무' },
-  { key: '사무외국어필수', track: '사무외국어필수', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '사무외국어필수' },
-  { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(e.rank) && e.track === '연구' },
-  { key: '임원', track: null, test: (e) => !TRACKED_RANKS.has(e.rank) },
+  { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '사무' },
+  { key: '사무외국어필수', track: '사무외국어필수', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '사무외국어필수' },
+  { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '연구' },
+  { key: '임원', track: null, test: (e) => !TRACKED_RANKS.has(baseRank(e.rank)) },
 ]
 
 // employee: employees 테이블 row, evaluations: 해당 직원의 evaluations rows, rankCriteriaMap: fetchRankCriteria() 결과
 export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate = 6) {
   const evalWindow = markRecentEvals(evaluations, employee.level)
   const evalPtsSum = evalWindow.reduce((s, e) => (e.counted ? s + Number(e.points || 0) : s), 0)
-  const rc = rankCriteriaMap?.[employee.rank]
+  // "차장(파트장)"처럼 직급 뒤에 역할이 괄호로 붙어있어도 순수 직급(baseRank)으로 기준표를 찾음
+  const rc = rankCriteriaMap?.[baseRank(employee.rank)]
   const req_tenure = rc?.req_tenure || 0
   const threshold = rc?.threshold || 0
   const hasCriteria = req_tenure > 0 || threshold > 0

@@ -438,7 +438,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />
-          경력직 인정포인트 적용 (7월2일 입사자=당해년도 평가 미대상자 일 경우체크)
+          경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
         </label>
 
         <div style={{ display: 'flex', gap: 8 }}>

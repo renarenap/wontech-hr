@@ -60,6 +60,13 @@ export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
 export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
 export const EXEC_RANKS = ['이사', '상무이사', '전무이사', '부사장', '수석부사장', '대표', '부회장', '회장']
 
+// 직급 끝에 "(파트장)"처럼 괄호로 붙은 역할 표기를 떼고 순수 직급만 뽑음 — 승진기준표(rank_criteria) 매칭이나
+// 임원/사무/연구 트랙 분류는 이 순수 직급으로 해야 함. 안 그러면 "차장(파트장)"이 rank_criteria의 "차장"과
+// 문자열이 안 맞아서 기준 자체가 없는 임원 취급이 돼버림(실제로 있었던 버그).
+export function baseRank(rank) {
+  return (rank || '').replace(/\s*\([^)]*\)\s*$/, '').trim()
+}
+
 // 값 자체가 "사무외국어필수"입니다 — 영어뿐 아니라 중국어·일본어로도 요건을 채울 수 있어서
 // 예전 이름(사무영어필수)에서 바꿨습니다. DB(employees.track, CHECK 제약)도 이 값으로 마이그레이션됨.
 export const TRACKS = [

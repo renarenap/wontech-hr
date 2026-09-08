@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, P, B, G, R, O } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
 import { downloadCSV, parseCSV } from '../lib/csv'
@@ -575,7 +575,7 @@ function ExportImportModal({ employees, onClose, onApplied }) {
     // 임원은 실제로는 track(사무/사무외국어필수/연구) 값과 무관하게 직급으로만 판단되지만,
     // CSV에서는 헷갈리지 않게 직급이 임원급이면 직군란도 "임원"으로 보여줌(업로드 시엔 다시 사무로 정규화됨)
     const rows = employees.map((e) => ({
-      ...(EXEC_RANKS.includes(e.rank) ? { ...e, track: '임원' } : e),
+      ...(EXEC_RANKS.includes(baseRank(e.rank)) ? { ...e, track: '임원' } : e),
       leaveMonths: Math.round((e.leave_years || 0) * 12), // 저장은 연 단위 소수, CSV엔 개월수로 보여줌
     }))
     downloadCSV(`employees_${isBackup ? 'backup_' : ''}${stamp}.csv`, rows, CSV_COLUMNS)

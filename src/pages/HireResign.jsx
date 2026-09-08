@@ -364,7 +364,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
-          경력직 인정포인트 적용 (7월2일 입사자=당해년도 평가 미대상자 일 경우체크)
+          경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
         </label>
         {backfillFullTenure && Number(level) === 0 && (
           <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
