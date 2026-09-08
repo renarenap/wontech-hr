@@ -18,7 +18,7 @@ async function addHireToRoster({ name, division = null, dept, team = null, locat
     .from('employees')
     .insert({
       name, division, dept, team, locations, rank, track, role: '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
-      backfill_full_tenure: backfillFullTenure,
+      backfill_full_tenure: backfillFullTenure, join_date: join_date || null,
     })
     .select()
     .single()
