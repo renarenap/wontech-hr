@@ -326,7 +326,10 @@ function QuickAddHireModal({ onClose, onCreated }) {
         )}
 
         <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
-        <input style={field} type="number" min="0" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <input style={field} type="number" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+          마이너스도 입력할 수 있어요 — 다만 실제 포인트 계산에선 0으로 처리돼요(마이너스로 깎이지 않음).
+        </div>
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
