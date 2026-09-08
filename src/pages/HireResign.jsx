@@ -199,17 +199,40 @@ export default function HireResign() {
   )
 }
 
+// 부문→본부→팀처럼 상위 선택에 따라 하위 옵션이 좁혀지는 select. value가 목록에 없으면(직접입력) 텍스트 입력칸이 따로 뜸.
+// required=false면 맨 위 빈 옵션("없음")을 고를 수 있어 안 채워도 되고, required=true면 그 옵션이 비활성이라 뭔가 골라야 함.
+function CascadeSelect({ label, value, onChange, customValue, onCustomChange, options, required }) {
+  const isCustom = value === '__custom__'
+  return (
+    <>
+      <label style={lbl}>{label}</label>
+      <select style={field} required={required} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="" disabled={required}>{required ? '선택하세요' : '(없음)'}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="__custom__">+ 새 {label} 직접 입력</option>
+      </select>
+      {isCustom && (
+        <input style={field} required={required} placeholder={`새 ${label}명`} value={customValue} onChange={(e) => onCustomChange(e.target.value)} />
+      )}
+    </>
+  )
+}
+
 // ═══ 입사자 등록 ═══
 function QuickAddHireModal({ onClose, onCreated }) {
   const [depts, setDepts] = useState([])
   const [divisions, setDivisions] = useState([])
   const [teams, setTeams] = useState([])
+  const [deptsByDivision, setDeptsByDivision] = useState({})
+  const [teamsByDept, setTeamsByDept] = useState({})
   const [name, setName] = useState('')
   const [locations, setLocations] = useState([])
   const [division, setDivision] = useState('')
+  const [customDivision, setCustomDivision] = useState('')
   const [dept, setDept] = useState('')
   const [customDept, setCustomDept] = useState('')
   const [team, setTeam] = useState('')
+  const [customTeam, setCustomTeam] = useState('')
   const [joinDate, setJoinDate] = useState('')
   const [rank, setRank] = useState('')
   const [track, setTrack] = useState('')
@@ -221,35 +244,59 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
   useEffect(() => {
     supabase.from('employees').select('division, dept, team').then(({ data }) => {
-      // 본부는 조직도 기준 목록 + 실제 데이터를 합쳐서 드롭다운으로, 부문·팀은 실제 데이터에 있는 값만 자동완성으로 보여줌
+      // 본부는 조직도 기준 목록 + 실제 데이터를 합쳐서, 부문·팀은 실제 데이터에 있는 값만 — 각각 전체 드롭다운으로 보여줌
       const rows = data || []
       const liveDept = rows.map((r) => r.dept).filter(Boolean)
       setDepts([...new Set([...DEPT_OPTIONS, ...liveDept])].sort((a, b) => a.localeCompare(b, 'ko')))
       setDivisions([...new Set(rows.map((r) => r.division).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')))
       setTeams([...new Set(rows.map((r) => r.team).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')))
+
+      // 부문→본부, 본부→팀 매핑 — 상위를 고르면 실제 그 밑에 있던 값들로만 좁혀서 보여주는 데 씀
+      const byDivision = {}
+      rows.forEach((r) => {
+        if (!r.division || !r.dept) return
+        ;(byDivision[r.division] ??= new Set()).add(r.dept)
+      })
+      setDeptsByDivision(Object.fromEntries(Object.entries(byDivision).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
+
+      const byDept = {}
+      rows.forEach((r) => {
+        if (!r.dept || !r.team) return
+        ;(byDept[r.dept] ??= new Set()).add(r.team)
+      })
+      setTeamsByDept(Object.fromEntries(Object.entries(byDept).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
     })
   }, [])
 
+  const divisionVal = division === '__custom__' ? customDivision.trim() : division
   const deptVal = dept === '__custom__' ? customDept.trim() : dept
+  const teamVal = team === '__custom__' ? customTeam.trim() : team
+  // 부문을 고르고 그 부문 밑에 실제 본부가 있으면 그것만, 없으면(부문을 안 골랐거나 데이터가 없으면) 전체 본부 목록
+  const deptOptions = (divisionVal && deptsByDivision[divisionVal]?.length) ? deptsByDivision[divisionVal] : depts
+  const teamOptions = (deptVal && teamsByDept[deptVal]?.length) ? teamsByDept[deptVal] : teams
   const isResearch = RESEARCH_RANKS.includes(rank)
+
+  // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
+  const changeDivision = (v) => { setDivision(v); setCustomDivision(''); setDept(''); setCustomDept(''); setTeam(''); setCustomTeam('') }
+  const changeDept = (v) => { setDept(v); setCustomDept(''); setTeam(''); setCustomTeam('') }
 
   // 부서/직위가 바뀌면 직군을 자동 제안 — 사용자가 직접 고른 뒤엔(trackTouched) 더 이상 덮어쓰지 않음
   useEffect(() => {
     if (trackTouched) return
     if (isResearch) { setTrack('연구'); return }
-    if (deptVal || team) setTrack(suggestTrackForDept(deptVal, false, team))
-  }, [deptVal, team, isResearch, trackTouched])
+    if (deptVal || teamVal) setTrack(suggestTrackForDept(deptVal, false, teamVal))
+  }, [deptVal, teamVal, isResearch, trackTouched])
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!deptVal) { setError('팀을 선택하거나 입력해주세요.'); return }
+    if (!deptVal) { setError(`${ORG_LEVEL_LABEL.dept}을 선택하거나 입력해주세요.`); return }
     if (!rank) { setError('직위를 선택해주세요.'); return }
     if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
     try {
-      await addHireToRoster({ name, division: division || null, dept: deptVal, team: team || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      await addHireToRoster({ name, division: divisionVal || null, dept: deptVal, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -266,33 +313,20 @@ function QuickAddHireModal({ onClose, onCreated }) {
         <label style={lbl}>위치</label>
         <LocationPicker value={locations} onChange={setLocations} />
 
-        <label style={lbl}>{ORG_LEVEL_LABEL.division}</label>
-        <input
-          style={field} list="division-options" placeholder="예: 영업부문 (없으면 비워두세요)"
-          value={division} onChange={(e) => setDivision(e.target.value)}
+        <CascadeSelect
+          label={ORG_LEVEL_LABEL.division} value={division} onChange={changeDivision}
+          customValue={customDivision} onCustomChange={setCustomDivision} options={divisions}
         />
-        <datalist id="division-options">
-          {divisions.map((d) => <option key={d} value={d} />)}
-        </datalist>
 
-        <label style={lbl}>{ORG_LEVEL_LABEL.dept}</label>
-        <select style={field} required value={dept} onChange={(e) => setDept(e.target.value)}>
-          <option value="" disabled>선택하세요</option>
-          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-          <option value="__custom__">+ 새 {ORG_LEVEL_LABEL.dept} 직접 입력</option>
-        </select>
-        {dept === '__custom__' && (
-          <input style={field} required placeholder={`새 ${ORG_LEVEL_LABEL.dept}명`} value={customDept} onChange={(e) => setCustomDept(e.target.value)} />
-        )}
-
-        <label style={lbl}>{ORG_LEVEL_LABEL.team}</label>
-        <input
-          style={field} list="team-options" placeholder="예: 해외CS팀 (없으면 비워두세요)"
-          value={team} onChange={(e) => setTeam(e.target.value)}
+        <CascadeSelect
+          label={ORG_LEVEL_LABEL.dept} value={dept} onChange={changeDept}
+          customValue={customDept} onCustomChange={setCustomDept} options={deptOptions} required
         />
-        <datalist id="team-options">
-          {teams.map((t) => <option key={t} value={t} />)}
-        </datalist>
+
+        <CascadeSelect
+          label={ORG_LEVEL_LABEL.team} value={team} onChange={(v) => { setTeam(v); setCustomTeam('') }}
+          customValue={customTeam} onCustomChange={setCustomTeam} options={teamOptions}
+        />
 
         <label style={lbl}>입사일</label>
         <input style={field} type="date" required value={joinDate} onChange={(e) => setJoinDate(e.target.value)} />
@@ -327,13 +361,10 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
         <input style={field} type="number" value={level} onChange={(e) => setLevel(e.target.value)} />
-        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
-          마이너스도 입력할 수 있어요 — 다만 실제 포인트 계산에선 0으로 처리돼요(마이너스로 깎이지 않음).
-        </div>
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
-          경력직 인정포인트 적용 (위 인정 연차 전체 × 직급 기준점수를 한 번에 기본포인트로 적용)
+          경력직 인정포인트 적용 (7월2일 입사자=당해년도 평가 미대상자 일 경우체크)
         </label>
         {backfillFullTenure && Number(level) === 0 && (
           <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
