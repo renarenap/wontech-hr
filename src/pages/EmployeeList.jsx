@@ -28,8 +28,8 @@ async function notifyDownload(rowCount) {
 }
 
 const TRACK_BADGE = { 사무: { c: '#475569', bg: '#f1f5f9' }, 사무외국어필수: { c: B, bg: '#e0f2fe' }, 연구: { c: P, bg: '#f3e8ff' } }
-const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
-const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
+const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 부장수석: '#b45309', 임원: '#92400e' }
+const CATEGORY_LABEL = { ...TRACK_LABEL, 부장수석: '부장/수석', 임원: '임원' }
 
 // CSV 내보내기/가져오기에 쓰는 편집 가능 컬럼 (id는 매칭용, 절대 수정·삭제 금지)
 const CSV_COLUMNS = [
@@ -64,9 +64,9 @@ const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept',
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'cn_lifetime', 'jp_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'cn_pts', 'jp_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
-const STATUS_SORT_ORDER = { possible: 0, engShort: 1, ptShort: 2, tenureShort: 2, onLeave: 3, short: 4, na: 5 }
+const STATUS_SORT_ORDER = { possible: 0, execReview: 0, engShort: 1, ptShort: 2, tenureShort: 2, onLeave: 3, short: 4, na: 5 }
 // 상태 필터에서 고를 수 있는 항목 — 실제로 issues 배열에 담기는 값만(상태 컬럼에 뱃지로 뜨는 것과 동일)
-const STATUS_FILTER_KEYS = ['possible', 'tenureShort', 'ptShort', 'engShort', 'onLeave', 'na']
+const STATUS_FILTER_KEYS = ['possible', 'execReview', 'tenureShort', 'ptShort', 'engShort', 'onLeave', 'na']
 // 선택 다운로드(승진후보 등 골라서 CSV로) 전용 컬럼 — 포인트현황 표에 보이는 값 그대로
 const SELECTION_CSV_COLUMNS = [
   { key: 'name', label: '이름' },

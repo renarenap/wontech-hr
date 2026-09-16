@@ -60,6 +60,10 @@ export const OFFICE_RANKS = ['사원', '대리', '과장', '차장', '부장']
 export const RESEARCH_RANKS = ['연구원', '전임연구원', '선임연구원', '책임연구원', '수석연구원']
 export const EXEC_RANKS = ['이사', '상무이사', '전무이사', '부사장', '수석부사장', '대표', '부회장', '회장']
 
+// 부장·수석연구원: 각 트랙 최고참 직급이지만 기준(진급P·체류연한)을 채워도 자동 승진이 아니라
+// "임원 심사 대상자"로만 표시됨(2026.09.16 기준표 개정) — 사무/연구 트랙 탭 대신 별도 탭으로 관리
+export const EXEC_CANDIDATE_RANKS = ['부장', '수석연구원']
+
 // 직급 끝에 "(파트장)"처럼 괄호로 붙은 역할 표기를 떼고 순수 직급만 뽑음 — 승진기준표(rank_criteria) 매칭이나
 // 임원/사무/연구 트랙 분류는 이 순수 직급으로 해야 함. 안 그러면 "차장(파트장)"이 rank_criteria의 "차장"과
 // 문자열이 안 맞아서 기준 자체가 없는 임원 취급이 돼버림(실제로 있었던 버그).
@@ -124,6 +128,7 @@ export const STATUS_LABEL = {
   ptShort: { label: '포인트 부족', color: Y, bg: '#fef9c3' },
   tenureShort: { label: '연차 부족', color: Y, bg: '#fef9c3' },
   engShort: { label: '외국어 미충족', color: '#c026d3', bg: '#fae8ff' },
+  execReview: { label: '임원 심사 대상', color: '#b45309', bg: '#fef3c7' },
   short: { label: '미충족', color: R, bg: '#fee2e2' },
   onLeave: { label: '🌿 휴직중', color: '#0d9488', bg: '#ccfbf1' },
   na: { label: '해당없음', color: '#94a3b8', bg: '#f1f5f9' },

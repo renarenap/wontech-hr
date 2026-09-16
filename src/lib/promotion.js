@@ -1,6 +1,6 @@
 // ═══ 승진포인트 계산 로직 (rank_criteria 파라미터 테이블 기반, 하드코딩 없음) ═══
 import { supabase } from '../supabaseClient'
-import { OFFICE_RANKS, RESEARCH_RANKS, sortByPeriod, baseRank } from './constants'
+import { OFFICE_RANKS, RESEARCH_RANKS, EXEC_CANDIDATE_RANKS, sortByPeriod, baseRank } from './constants'
 import { minusYearAdjustment, pendingBackfillAdjustment } from './pendingPoints'
 
 const TRACKED_RANKS = new Set([...OFFICE_RANKS, ...RESEARCH_RANKS])
@@ -86,14 +86,15 @@ export function engGateMet(employee) {
 }
 
 // 대시보드/포인트현황 등에서 공통으로 쓰는 직군 구분.
-// "임원"은 승진 기준 유무(hasCriteria)가 아니라 직급 자체로 판단해야 함 — 부장·수석연구원도
-// 승진 기준이 없어(해당없음) hasCriteria는 false지만, 이들은 임원이 아니라 그냥 사무직/연구직 최고참
-// 직급이라 각자의 트랙(사무/연구) 탭에 그대로 남아있어야 함. TRACKED_RANKS(사원~부장, 연구원~수석연구원)에
-// 없는 직급(이사·상무·대표 등 진짜 임원 + 직급 미확인)만 "임원" 탭으로 분류.
+// "임원"은 승진 기준 유무(hasCriteria)가 아니라 직급 자체로 판단해야 함 — TRACKED_RANKS(사원~부장,
+// 연구원~수석연구원)에 없는 직급(이사·상무·대표 등 진짜 임원 + 직급 미확인)만 "임원" 탭으로 분류.
+// 부장·수석연구원은 각 트랙(사무/연구) 최고참 직급이지만, 기준 충족 시 자동 승진이 아니라 임원 심사
+// 대상자로만 관리되는 별도 그룹이라(2026.09.16 기준표 개정) "부장/수석" 탭으로 따로 분류함.
 export const CATEGORIES = [
-  { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '사무' },
-  { key: '사무외국어필수', track: '사무외국어필수', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '사무외국어필수' },
-  { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && e.track === '연구' },
+  { key: '사무', track: '사무', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && !EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank)) && e.track === '사무' },
+  { key: '사무외국어필수', track: '사무외국어필수', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && !EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank)) && e.track === '사무외국어필수' },
+  { key: '연구', track: '연구', test: (e) => TRACKED_RANKS.has(baseRank(e.rank)) && !EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank)) && e.track === '연구' },
+  { key: '부장수석', track: null, test: (e) => EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank)) },
   { key: '임원', track: null, test: (e) => !TRACKED_RANKS.has(baseRank(e.rank)) },
 ]
 
@@ -137,6 +138,9 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const ptsMet = currentPts >= threshold
   const engGated = isEngGateTrack(employee)
   const engOk = engGateMet(employee)
+  // 부장·수석연구원은 기준(진급P·체류연한)을 채워도 자동 승진이 아니라 임원 심사 대상자로만 표시됨
+  const execCandidate = EXEC_CANDIDATE_RANKS.includes(baseRank(employee.rank))
+  const metStatus = execCandidate ? 'execReview' : 'possible'
 
   // status: 대시보드 KPI처럼 "한 사람당 버킷 하나"가 필요한 곳에서 쓰는 대표 상태(우선순위 기반)
   // 승진가능과 휴직중은 배타적 — 지금 실제로 휴직 중이면 포인트·연차가 기준을 넘겨도 "승진가능"이 아니라
@@ -144,7 +148,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   let status
   if (!hasCriteria) status = 'na'
   else if (onLeaveNow) status = 'onLeave'
-  else if (ptsMet && tenureMet) status = (!engGated || engOk) ? 'possible' : 'engShort'
+  else if (ptsMet && tenureMet) status = (!engGated || engOk) ? metStatus : 'engShort'
   else if (ptsMet && !tenureMet) status = 'tenureShort'
   else if (!ptsMet && tenureMet) status = 'ptShort'
   else status = 'short'
@@ -160,7 +164,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
     if (!tenureMet) issues.push('tenureShort')
     if (!ptsMet) issues.push('ptShort')
     if (engGated && !engOk) issues.push('engShort')
-    if (issues.length === 0) issues.push('possible')
+    if (issues.length === 0) issues.push(metStatus)
   }
 
   return {

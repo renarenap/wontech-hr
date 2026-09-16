@@ -194,7 +194,7 @@ export default function EmployeeDetail() {
               <div><div style={fl}>진급 기준</div><div style={fv}>{view.threshold}P</div></div>
             </>
           ) : (
-            <div style={{ gridColumn: 'span 2' }}><div style={fl}>승진포인트 기준</div><div style={{ ...fv, color: '#94a3b8' }}>해당없음 (임원/부장/수석연구원은 별도 승진 기준을 두지 않음)</div></div>
+            <div style={{ gridColumn: 'span 2' }}><div style={fl}>승진포인트 기준</div><div style={{ ...fv, color: '#94a3b8' }}>해당없음 (임원은 별도 승진 기준을 두지 않음)</div></div>
           )}
         </div>
         {(view.engGated || view.eng_pts > 0 || view.cn_pts > 0 || view.jp_pts > 0) && (

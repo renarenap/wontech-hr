@@ -5,8 +5,8 @@ import { O, P, G, Y, R, B, TRACK_LABEL } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
 
-const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 임원: '#92400e' }
-const CATEGORY_LABEL = { ...TRACK_LABEL, 임원: '임원' }
+const CATEGORY_COLOR = { 사무: '#475569', 사무외국어필수: B, 연구: P, 부장수석: '#b45309', 임원: '#92400e' }
+const CATEGORY_LABEL = { ...TRACK_LABEL, 부장수석: '부장/수석', 임원: '임원' }
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -45,6 +45,7 @@ export default function Dashboard() {
     const tracked = employees.filter((e) => e.hasCriteria)
     const na = employees.length - tracked.length
     const possible = tracked.filter((e) => e.status === 'possible').length
+    const execReview = tracked.filter((e) => e.status === 'execReview').length
     const ptShort = tracked.filter((e) => e.status === 'ptShort').length
     const tenureShort = tracked.filter((e) => e.status === 'tenureShort').length
     const engShort = tracked.filter((e) => e.status === 'engShort').length
@@ -54,12 +55,12 @@ export default function Dashboard() {
 
     const categoryCounts = Object.fromEntries(CATEGORIES.map((c) => [c.key, employees.filter(c.test).length]))
 
-    // 승진임박자에는 휴직중(일시정지)인 사람은 넣지 않음 — 승진가능과 배타적인 상태라 "곧 승진가능" 목록에도 안 맞음
+    // 승진임박자에는 휴직중(일시정지)·이미 기준 충족(승진가능/임원심사대상)인 사람은 넣지 않음
     const imminent = tracked
-      .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible' && e.status !== 'onLeave')
+      .filter((e) => e.threshold > 0 && e.currentPts / e.threshold >= 0.9 && e.status !== 'possible' && e.status !== 'execReview' && e.status !== 'onLeave')
       .sort((a, b) => b.currentPts / b.threshold - a.currentPts / a.threshold)
 
-    return { total, na, possible, ptShort, tenureShort, engShort, short, onLeave, avg, categoryCounts, imminent }
+    return { total, na, possible, execReview, ptShort, tenureShort, engShort, short, onLeave, avg, categoryCounts, imminent }
   }, [employees])
 
   const byRank = useMemo(() => {
@@ -71,7 +72,7 @@ export default function Dashboard() {
       const r = e.rank
       if (!out[r]) out[r] = { t: 0, p: 0, s: 0 }
       out[r].t++
-      if (e.status === 'possible') out[r].p++
+      if (e.status === 'possible' || e.status === 'execReview') out[r].p++
       out[r].s += e.currentPts
     })
     return out
@@ -86,6 +87,7 @@ export default function Dashboard() {
         items={[
           { v: stats.total, l: '전체 인원', c: P, onClick: () => navigate('/employees') },
           { v: stats.possible, l: '승진 가능', c: G, onClick: () => navigate('/employees?status=possible') },
+          { v: stats.execReview, l: '임원 심사 대상', c: '#b45309', onClick: () => navigate('/employees?status=execReview') },
           { v: stats.onLeave, l: '휴직중', c: '#0d9488', onClick: () => navigate('/employees?status=onLeave') },
           { v: stats.ptShort + stats.tenureShort, l: '연차/P 부족', c: Y },
           { v: stats.engShort, l: '외국어 미충족', c: '#c026d3' },
