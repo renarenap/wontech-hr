@@ -101,15 +101,16 @@ export default function Criteria() {
         }}
       >
         {NAV.map((n) => (
-          <a
-            key={n.id} href={`#${n.id}`}
+          <button
+            key={n.id} type="button"
+            onClick={() => document.getElementById(n.id)?.scrollIntoView({ behavior: 'smooth' })}
             style={{
-              fontSize: 11, fontWeight: 600, color: '#64748b', textDecoration: 'none',
+              fontSize: 11, fontWeight: 600, color: '#64748b', textDecoration: 'none', border: 'none', cursor: 'pointer',
               padding: '5px 10px', borderRadius: 20, background: '#f1f5f9', whiteSpace: 'nowrap',
             }}
           >
             {n.label}
-          </a>
+          </button>
         ))}
       </div>
 
