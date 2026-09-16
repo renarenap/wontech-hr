@@ -90,7 +90,7 @@ function HeaderStats() {
   if (!s) return null
   return (
     <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginLeft: 12 }}>
-      {s.asOf && `기준일 ${s.asOf} · `}총 {s.total ?? '—'}명 · 이번달 입사 {s.hiresThisMonth ?? '—'} · 퇴사 {s.resignsThisMonth ?? '—'}
+      {s.asOf && `데이터 기준일 ${s.asOf} · `}총 {s.total ?? '—'}명 · 이번달 입사 {s.hiresThisMonth ?? '—'} · 퇴사 {s.resignsThisMonth ?? '—'}
     </span>
   )
 }
