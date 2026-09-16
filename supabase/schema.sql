@@ -89,7 +89,7 @@ create index if not exists cert_entries_employee_id_idx on cert_entries(employee
 create table if not exists tech_entries (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references employees(id) on delete cascade,
-  category text not null check (category in ('국내특허','해외특허','국내논문','국제논문')),
+  category text not null check (category in ('해외특허','국제논문','국내특허','국내논문','실용신안','디자인')),
   name text not null,
   achieved_date date,
   points numeric not null default 0,

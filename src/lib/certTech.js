@@ -7,9 +7,10 @@ export const CERT_CATEGORY_CAP = { 전문자격: 6, 직무자격: 3 }
 export const CERT_CATEGORY_DEFAULT_PTS = { 전문자격: 3, 직무자격: 1 }
 export const CERT_CATEGORIES = ['전문자격', '직무자격']
 
-export const TECH_CATEGORY_DEFAULT_PTS = { 국내특허: 2, 해외특허: 3, 국내논문: 2, 국제논문: 3 }
-export const TECH_CATEGORIES = ['국내특허', '해외특허', '국내논문', '국제논문']
-export const TECH_TOTAL_CAP = 6
+// 2026.09.16 기준표 개정 — 실용신안·디자인 등록 항목 신설 + 배점·상한 조정(기술성과 전체 합산 최대 4P)
+export const TECH_CATEGORY_DEFAULT_PTS = { 해외특허: 2, 국제논문: 2, 국내특허: 1.5, 국내논문: 1.5, 실용신안: 1, 디자인: 0.5 }
+export const TECH_CATEGORIES = ['해외특허', '국제논문', '국내특허', '국내논문', '실용신안', '디자인']
+export const TECH_TOTAL_CAP = 4
 
 // 카테고리별 합계를 각자 상한까지만 인정해서 더함 — 상한 초과분은 자동으로 컷됨
 export function computeCertPts(entries) {

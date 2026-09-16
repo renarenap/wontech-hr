@@ -853,7 +853,7 @@ function CertSection({ employeeId, entries, entriesError, onChanged }) {
   )
 }
 
-// ═══ 기술성과 — 특허/논문(국내2P·해외3P)을 건별로 입력받아 전체 상한(최대6P) 자동 적용 ═══
+// ═══ 기술성과 — 특허/논문/실용신안/디자인을 건별로 입력받아 전체 상한(최대4P) 자동 적용 ═══
 function TechSection({ employeeId, entries, entriesError, onChanged }) {
   const [category, setCategory] = useState(TECH_CATEGORIES[0])
   const [name, setName] = useState('')
@@ -895,7 +895,7 @@ function TechSection({ employeeId, entries, entriesError, onChanged }) {
     <div style={crd}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🔬 기술성과 (특허·논문)</div>
       <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 16 }}>
-        국내 특허·논문: 건당 2P · 해외·국제 특허·논문: 건당 3P(합계 최대 6P) — 상한을 넘을 경우는 반영되지 않습니다.
+        해외특허·국제논문 건당 2P · 국내특허·국내논문 건당 1.5P · 실용신안 건당 1P · 디자인 건당 0.5P (합계 최대 4P) — 상한을 넘을 경우는 반영되지 않습니다.
       </div>
 
       <div style={{ marginBottom: 16 }}>
