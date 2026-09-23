@@ -9,6 +9,7 @@ import wontechWordmark from '../assets/wontech-wordmark.png'
 const NAV = [
   { to: '/', icon: '📊', label: '대시보드', g: '승진포인트', end: true },
   { to: '/employees', icon: '👥', label: '포인트 현황', g: '승진포인트' },
+  { to: '/analysis', icon: '📈', label: '상세 분석', g: '승진포인트' },
   { to: '/criteria', icon: '📋', label: '기준표', g: '승진포인트' },
   { to: '/hire-resign', icon: '🔁', label: '입·퇴사 관리', g: '인사관리' },
   { to: '/transfer', icon: '🔀', label: '발령', g: '인사관리' },
@@ -20,6 +21,7 @@ const NAV = [
 const TITLES = {
   '/': '승진포인트 대시보드',
   '/employees': '승진포인트 현황',
+  '/analysis': '승진·고과 상세 분석',
   '/criteria': '기준표',
   '/criteria-settings': '기준값 설정',
   '/recruit': '채용 현황',
