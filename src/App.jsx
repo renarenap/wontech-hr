@@ -8,6 +8,7 @@ import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import EmployeeList from './pages/EmployeeList'
 import EmployeeDetail from './pages/EmployeeDetail'
+import Analysis from './pages/Analysis'
 import Criteria from './pages/Criteria'
 import CriteriaSettings from './pages/CriteriaSettings'
 import HireResign from './pages/HireResign'
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/employees" element={<EmployeeList />} />
             <Route path="/employees/:id" element={<EmployeeDetail />} />
+            <Route path="/analysis" element={<Analysis />} />
             <Route path="/criteria" element={<Criteria />} />
             <Route path="/criteria-settings" element={<RequireAdmin><CriteriaSettings /></RequireAdmin>} />
             <Route path="/hire-resign" element={<HireResign />} />
