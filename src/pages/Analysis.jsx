@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O, P, G, Y, R, B, TRACK_LABEL, baseRank, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
+import { O, P, G, Y, R, B, TRACK_LABEL, baseRank, EXEC_CANDIDATE_RANKS, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
 import { downloadCSV } from '../lib/csv'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import {
@@ -42,6 +42,7 @@ export default function Analysis() {
   const [minStreak, setMinStreak] = useState(3)
   const [outlookGrade, setOutlookGrade] = useState('GD')
   const [includeAlready, setIncludeAlready] = useState(true)
+  const [includeExec, setIncludeExec] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -148,6 +149,7 @@ export default function Analysis() {
         <OutlookSection
           rows={scoped} period={period} goTo={goTo}
           grade={outlookGrade} setGrade={setOutlookGrade} includeAlready={includeAlready} setIncludeAlready={setIncludeAlready}
+          includeExec={includeExec} setIncludeExec={setIncludeExec}
         />
       )}
       {section === 'good' && (
@@ -213,6 +215,43 @@ const shortLoc = (l) => l.replace(/\(.*\)/, '')
 const chartCard = { background: '#f8fafc', borderRadius: 10, padding: '14px 16px', position: 'relative', minWidth: 0 }
 const chartTitle = { fontSize: 12, fontWeight: 700, marginBottom: 10, color: '#334155' }
 
+// 그래프가 "채워지듯" 차오르는 효과 — animKey(선택한 등급·체크박스 등)가 바뀔 때마다 막대를 0에서 다시 키움.
+// 0으로 되돌릴 땐 transition 없이 즉시, 다음 프레임에 켜서 실제 값까지 부드럽게 늘어나게 함.
+// 움직임 줄이기(prefers-reduced-motion) 설정한 사람한텐 효과 없이 바로 최종값을 보여줌
+const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+function useGrow(animKey) {
+  const [on, setOn] = useState(reduceMotion)
+  // useLayoutEffect: 새 값이 한 프레임 먼저 그려졌다가 0으로 튀는 깜빡임 없이 바로 0에서 시작하게
+  useLayoutEffect(() => {
+    if (reduceMotion) return undefined
+    setOn(false)
+    let id2
+    const id1 = requestAnimationFrame(() => { id2 = requestAnimationFrame(() => setOn(true)) })
+    return () => { cancelAnimationFrame(id1); cancelAnimationFrame(id2) }
+  }, [animKey])
+  // i: 막대 순서 — 살짝씩 늦게 출발해서 왼쪽/위부터 차례로 차오르게
+  const tr = (prop, i = 0) => (on && !reduceMotion ? `${prop} .7s cubic-bezier(.22,1,.36,1) ${i * 60}ms` : 'none')
+  return { on, tr }
+}
+
+// 큰 숫자도 0에서 목표값까지 올라가게(0.7초)
+function useCountUp(target, animKey) {
+  const [v, setV] = useState(reduceMotion ? target : 0)
+  useEffect(() => {
+    if (reduceMotion) { setV(target); return undefined }
+    let raf
+    const start = performance.now()
+    const step = (t) => {
+      const k = Math.min(1, (t - start) / 700)
+      setV(Math.round(target * (1 - Math.pow(1 - k, 3))))
+      if (k < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, animKey])
+  return v
+}
+
 // 막대에 마우스를 올리면 뜨는 툴팁 — 카드(position: relative) 기준 좌표로 띄움
 function useChartTip() {
   const [tip, setTip] = useState(null)
@@ -237,23 +276,25 @@ function useChartTip() {
 }
 
 // 인원수: 큰 숫자 + 구분별 세로 막대. bars: [{ label, value, active }] — active=false는 지금 명단에 안 들어간 구분(흐리게)
-function CountChart({ total, caption, bars }) {
+function CountChart({ total, caption, bars, animKey }) {
   const { bind, el } = useChartTip()
+  const { on, tr } = useGrow(animKey)
+  const shown = useCountUp(total, animKey)
   const max = Math.max(1, ...bars.map((b) => b.value))
   return (
     <div style={chartCard} data-chart>
       <div style={chartTitle}>인원수</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-        <span style={{ fontSize: 30, fontWeight: 800, color: '#111827', lineHeight: 1 }}>{total}</span>
+        <span style={{ fontSize: 30, fontWeight: 800, color: '#111827', lineHeight: 1 }}>{shown}</span>
         <span style={{ fontSize: 13, color: '#64748b' }}>명</span>
         {caption && <span style={{ ...hint, marginLeft: 4 }}>{caption}</span>}
       </div>
       {bars.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 96, borderBottom: '1px solid #e2e8f0' }}>
-          {bars.map((b) => (
+          {bars.map((b, i) => (
             <div key={b.label} style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', cursor: 'default' }} {...bind(`${b.label}: ${b.value}명`)}>
               <span style={{ fontSize: 11, fontWeight: 700, color: b.active ? '#111827' : '#94a3b8', marginBottom: 3 }}>{b.value}</span>
-              <div style={{ width: '70%', maxWidth: 34, height: `${(b.value / max) * 72}px`, minHeight: b.value ? 3 : 0, borderRadius: '4px 4px 0 0', background: b.active ? O : '#cbd5e1' }} />
+              <div style={{ width: '70%', maxWidth: 34, height: on ? `${Math.max(b.value ? 3 : 0, (b.value / max) * 72)}px` : 0, borderRadius: '4px 4px 0 0', background: b.active ? O : '#cbd5e1', transition: on ? `${tr('height', i)}, background .3s` : 'none' }} />
             </div>
           ))}
         </div>
@@ -271,8 +312,9 @@ function CountChart({ total, caption, bars }) {
 }
 
 // 지역 비율: 100% 누적 가로막대 + 구간마다 직접 라벨(색만으로 구분하지 않게) + 아래 범례
-function LocationChart({ list }) {
+function LocationChart({ list, animKey }) {
   const { bind, el } = useChartTip()
+  const { on, tr } = useGrow(animKey)
   const locCount = {}
   let multi = 0
   list.forEach((e) => {
@@ -286,12 +328,12 @@ function LocationChart({ list }) {
   return (
     <div style={chartCard} data-chart>
       <div style={chartTitle}>지역 비율</div>
-      <div style={{ display: 'flex', gap: 2, height: 34, marginBottom: 12 }}>
-        {order.map((l) => (
+      <div style={{ display: 'flex', gap: 2, height: 34, marginBottom: 12, background: '#eef2f6', borderRadius: 4 }}>
+        {order.map((l, i) => (
           <div
             key={l} {...bind(`${l}: ${locCount[l]}명 (${pct(l)}%)`)}
             style={{
-              width: `${(locCount[l] / sum) * 100}%`, background: LOC_COLOR[l], borderRadius: 4, minWidth: 4,
+              width: on ? `${(locCount[l] / sum) * 100}%` : 0, background: LOC_COLOR[l], borderRadius: 4, minWidth: on ? 4 : 0, transition: tr('width', i),
               display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               color: l === '미지정' ? '#475569' : '#fff', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             }}
@@ -317,8 +359,9 @@ function LocationChart({ list }) {
 }
 
 // 본부 순위: 인원 많은 순 가로막대 — 라벨은 막대 오른쪽에 인원·본부 인원 대비 비율
-function DeptRankChart({ list, population }) {
+function DeptRankChart({ list, population, animKey }) {
   const { bind, el } = useChartTip()
+  const { on, tr } = useGrow(animKey)
   const deptTotal = {}
   population.forEach((e) => { const k = e.dept || NO_DEPT; deptTotal[k] = (deptTotal[k] || 0) + 1 })
   const deptCount = {}
@@ -336,7 +379,7 @@ function DeptRankChart({ list, population }) {
               <span style={{ width: 16, color: i < 3 ? O : '#94a3b8', fontWeight: 800, textAlign: 'right' }}>{i + 1}</span>
               <span style={{ width: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#334155' }}>{d}</span>
               <div style={{ flex: 1, height: 14 }}>
-                <div style={{ height: 14, borderRadius: '0 4px 4px 0', background: i < 3 ? O : '#fdba74', width: `${(n / top) * 100}%`, minWidth: 3 }} />
+                <div style={{ height: 14, borderRadius: '0 4px 4px 0', background: i < 3 ? O : '#fdba74', width: on ? `${(n / top) * 100}%` : 0, minWidth: on ? 3 : 0, transition: tr('width', i) }} />
               </div>
               <span style={{ width: 78, textAlign: 'right', whiteSpace: 'nowrap' }}>
                 <b>{n}명</b> <span style={{ color: '#94a3b8' }}>({ratio}%)</span>
@@ -352,12 +395,14 @@ function DeptRankChart({ list, population }) {
 
 // list: 지금 보여주는 명단 / population: 같은 필터(직군·본부)가 걸린 전체 인원 — 본부별 비율 분모
 // countBars/countCaption: 인원수 카드의 구분별 막대(탭마다 다름)
-function ListSummary({ list, population, countBars = [], countCaption }) {
+function ListSummary({ list, population, countBars = [], countCaption, animKey: extraKey = '' }) {
+  // 명단이 바뀌면(필터·등급 선택 등) 그래프를 다시 채움
+  const animKey = `${extraKey}|${list.length}|${list[0]?.id || ''}|${list[list.length - 1]?.id || ''}`
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 16 }}>
-      <CountChart total={list.length} caption={countCaption} bars={countBars} />
-      {list.length > 0 ? <LocationChart list={list} /> : <div style={chartCard}><div style={chartTitle}>지역 비율</div><EmptyState /></div>}
-      {list.length > 0 ? <DeptRankChart list={list} population={population} /> : <div style={chartCard}><div style={chartTitle}>본부 순위</div><EmptyState /></div>}
+      <CountChart total={list.length} caption={countCaption} bars={countBars} animKey={animKey} />
+      {list.length > 0 ? <LocationChart list={list} animKey={animKey} /> : <div style={chartCard}><div style={chartTitle}>지역 비율</div><EmptyState /></div>}
+      {list.length > 0 ? <DeptRankChart list={list} population={population} animKey={animKey} /> : <div style={chartCard}><div style={chartTitle}>본부 순위</div><EmptyState /></div>}
     </div>
   )
 }
@@ -403,8 +448,14 @@ function DownloadButton({ filename, rows, columns }) {
 }
 
 // ─── 1. 올해 평가 반영 승진 예상 ───
-function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncludeAlready, goTo }) {
-  const tracked = rows.filter((e) => e.hasCriteria)
+// 부장·수석연구원(임원 심사 대상)은 승진이 필수가 아니라 기본은 빼고 보고, 체크하면 같이 보여줌
+const isExecCandidate = (e) => EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank))
+
+function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncludeAlready, includeExec, setIncludeExec, goTo }) {
+  const allTracked = rows.filter((e) => e.hasCriteria)
+  const tracked = includeExec ? allTracked : allTracked.filter((e) => !isExecCandidate(e))
+  const execCount = allTracked.filter((e) => isExecCandidate(e)
+    && ((includeAlready && e.outlook.bucket === 'already') || (OUTLOOK[e.outlook.bucket] && passesWithGrade(e.outlook, grade)))).length
   const count = (b) => tracked.filter((e) => e.outlook.bucket === b).length
   const already = tracked.filter((e) => e.outlook.bucket === 'already')
   const byGrade = tracked.filter((e) => OUTLOOK[e.outlook.bucket] && passesWithGrade(e.outlook, grade))
@@ -469,11 +520,16 @@ function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncl
               <input type="checkbox" checked={includeAlready} onChange={(e) => setIncludeAlready(e.target.checked)} />
               이미 기준 충족한 {already.length}명 포함
             </label>
+            <label style={{ fontSize: 12, color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={includeExec} onChange={(e) => setIncludeExec(e.target.checked)} />
+              임원 심사 대상(부장/수석) {execCount}명 포함
+            </label>
             <DownloadButton filename={`올해${gradeText(grade)}이상_승진가능`} rows={csvRows} columns={csvCols} />
           </div>
         </div>
         <ListSummary
           list={list} population={rows} countCaption={`올해 ${gradeText(grade)} 이상 기준`}
+          animKey={`${grade}|${includeAlready}|${includeExec}`}
           countBars={[
             ...(includeAlready ? [{ label: '이미 충족', value: already.length, active: true }] : []),
             { label: '평가 확정', value: byGrade.filter((e) => e.outlook.confirmed).length, active: true },
