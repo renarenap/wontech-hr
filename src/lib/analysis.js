@@ -1,4 +1,4 @@
-// ═══ 상세 분석 — 내년 승진 예상 / 고과 추이 계산 (화면과 분리해 둔 순수 함수들) ═══
+// ═══ 상세 분석 — 올해 평가 반영 시 승진 예상 / 고과 추이 계산 (화면과 분리해 둔 순수 함수들) ═══
 import { GRADE_HEIGHT, SIM_GRADE_POINTS, sortByPeriod } from './constants'
 import { deriveEmployee } from './promotion'
 
@@ -20,18 +20,26 @@ export function projectNextYear(employee, evaluations, rankCriteriaMap, leaveRat
 
 const passes = (p) => p.ptsMet && p.tenureMet
 
-// 내년 승진 예상 분류 — 지금 이미 기준을 채운 사람·기준 없는 사람·휴직중은 여기서 다루지 않음(각각 별도 표시)
-//   safe  : GD만 받아도 통과(평가만 무난하면 내년 승진 대상)
-//   needVG: VG 이상이어야 통과
-//   needEX: EX여야 통과
+// 올해 평가 등급 가정 순서(낮은 등급부터) + 예전 반기 등급 표기 — 화면에 "GD(B)"처럼 같이 보여줌
+export const GRADE_STEPS = ['NI', 'GD', 'VG', 'EX']
+export const OLD_GRADE = { NI: 'C', GD: 'B', VG: 'A', EX: 'S' }
+export const gradeText = (g) => `${g}(${OLD_GRADE[g]})`
+
+// 올해 평가 반영 시 승진 예상 분류 — 지금 이미 기준을 채운 사람·기준 없는 사람·휴직중은 여기서 다루지 않음(각각 별도 표시)
+// 올해 평가 후 1/1 연차 일괄 +1까지 반영된 상태로 판정 — 올해 평가 결과로 바로 다음 승진 시점에 되는지를 봄
+//   safe  : GD(B)만 받아도 통과(NI여도 되는 사람 포함)
+//   needVG: VG(A) 이상이어야 통과
+//   needEX: EX(S)여야 통과
 //   no    : EX를 받아도 미달
+// minGrade: 통과에 필요한 최저 등급 — "올해 X 이상 받으면 승진 가능" 누적 필터에 씀
 // 올해 평가가 이미 입력된 사람은 등급 가정 없이 실제값으로 계산해서 safe/no 둘 중 하나로만 나눔(confirmed=true)
 export const OUTLOOK = {
-  safe: { label: '안정권', desc: 'GD만 받아도 통과', color: '#16a34a', bg: '#dcfce7' },
-  needVG: { label: '고과 필요', desc: 'VG 이상 필요', color: '#ca8a04', bg: '#fef9c3' },
-  needEX: { label: 'EX 필요', desc: 'EX여야 통과', color: '#ea580c', bg: '#ffedd5' },
-  no: { label: '내년 불가', desc: 'EX여도 미달', color: '#64748b', bg: '#f1f5f9' },
+  safe: { label: 'GD(B)면 가능', color: '#16a34a', bg: '#dcfce7' },
+  needVG: { label: 'VG(A) 필요', color: '#ca8a04', bg: '#fef9c3' },
+  needEX: { label: 'EX(S) 필요', color: '#ea580c', bg: '#ffedd5' },
+  no: { label: '올해 평가로 불가', color: '#64748b', bg: '#f1f5f9' },
 }
+const BUCKET_OF = { NI: 'safe', GD: 'safe', VG: 'needVG', EX: 'needEX' }
 
 export function nextYearOutlook(derived, evaluations, rankCriteriaMap, leaveRate, period = currentEvalPeriod()) {
   if (!derived.hasCriteria) return { bucket: 'na' }
@@ -42,16 +50,23 @@ export function nextYearOutlook(derived, evaluations, rankCriteriaMap, leaveRate
   const langBlocked = derived.engGated && !derived.engOk
   if (confirmed) {
     const p = projectNextYear(derived, evaluations, rankCriteriaMap, leaveRate, null, period)
-    return { bucket: passes(p) ? 'safe' : 'no', confirmed, langBlocked, projections: { actual: p }, best: p }
+    const ok = passes(p)
+    return { bucket: ok ? 'safe' : 'no', minGrade: null, confirmed, confirmedPass: ok, langBlocked, projections: { actual: p }, best: p }
   }
 
   const projections = {}
-  let bucket = 'no'
-  for (const [g, b] of [['GD', 'safe'], ['VG', 'needVG'], ['EX', 'needEX']]) {
+  let minGrade = null
+  for (const g of GRADE_STEPS) {
     projections[g] = projectNextYear(derived, evaluations, rankCriteriaMap, leaveRate, g, period)
-    if (bucket === 'no' && passes(projections[g])) bucket = b
+    if (!minGrade && passes(projections[g])) minGrade = g
   }
-  return { bucket, confirmed, langBlocked, projections, best: projections.EX }
+  return { bucket: minGrade ? BUCKET_OF[minGrade] : 'no', minGrade, confirmed, langBlocked, projections, best: projections.EX }
+}
+
+// "올해 grade 이상 받으면 승진 가능"에 들어가는지 — 올해 평가가 이미 확정된 사람은 실제 결과로만 판단
+export function passesWithGrade(outlook, grade) {
+  if (outlook.confirmed) return !!outlook.confirmedPass
+  return !!outlook.minGrade && GRADE_STEPS.indexOf(outlook.minGrade) <= GRADE_STEPS.indexOf(grade)
 }
 
 // ═══ 고과 추이 ═══
