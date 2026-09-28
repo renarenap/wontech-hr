@@ -334,3 +334,21 @@ export function LocationPicker({ value, onChange }) {
     </div>
   )
 }
+
+// 부문·본부·팀처럼 "기존 값 드롭다운 + 새 값 직접 입력"이 필요한 칸 — value가 '__custom__'이면 아래 입력칸이 열림
+export function CascadeSelect({ label: text, value, onChange, customValue, onCustomChange, options, required }) {
+  const isCustom = value === '__custom__'
+  return (
+    <>
+      <label style={label}>{text}</label>
+      <select style={field} required={required} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="" disabled={required}>{required ? '선택하세요' : '(없음)'}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="__custom__">+ 새 {text} 직접 입력</option>
+      </select>
+      {isCustom && (
+        <input style={field} required={required} placeholder={`새 ${text}명`} value={customValue} onChange={(e) => onCustomChange(e.target.value)} />
+      )}
+    </>
+  )
+}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
@@ -11,7 +11,7 @@ import {
   fetchCertEntries, addCertEntry, deleteCertEntry, CERT_CATEGORY_CAP, CERT_CATEGORY_DEFAULT_PTS, CERT_CATEGORIES,
   fetchTechEntries, addTechEntry, deleteTechEntry, TECH_CATEGORY_DEFAULT_PTS, TECH_CATEGORIES, TECH_TOTAL_CAP,
 } from '../lib/certTech'
-import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
+import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, CascadeSelect, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -407,11 +407,31 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
   const set = (k) => (ev) => setForm({ ...form, [k]: ev.target.value })
   const setChecked = (k) => (ev) => setForm({ ...form, [k]: ev.target.checked })
 
+  // 부문·본부·팀은 입사자 등록처럼 현재 있는 값들을 드롭다운으로 — 목록에 없는 새 이름은 '직접 입력'으로
+  const [orgRows, setOrgRows] = useState([])
+  const [custom, setCustom] = useState({ division: '', dept: '', team: '' })
+  useEffect(() => {
+    supabase.from('employees').select('division, dept, team').then(({ data }) => setOrgRows(data || []))
+  }, [])
+  const orgVal = (k) => (form[k] === '__custom__' ? custom[k].trim() : form[k].trim())
+  const orgOptions = useMemo(() => {
+    const uniq = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'))
+    // 상위를 골라뒀고 그 밑에 실제 값이 있으면 그것만, 아니면 전체 — 지금 값은 목록에 없어도 항상 포함
+    const narrow = (k, parentKey) => {
+      const parent = parentKey && orgVal(parentKey)
+      const under = parent ? orgRows.filter((r) => r[parentKey] === parent).map((r) => r[k]) : []
+      const base = under.some(Boolean) ? under : orgRows.map((r) => r[k]).concat(k === 'dept' ? DEPT_OPTIONS : [])
+      return uniq([...base, form[k] === '__custom__' ? '' : form[k]])
+    }
+    return { division: narrow('division'), dept: narrow('dept', 'division'), team: narrow('team', 'dept') }
+  }, [orgRows, form.division, form.dept, form.team, custom])
+
   const submit = async (ev) => {
     ev.preventDefault()
     setError('')
     if (!form.name.trim()) { setError('이름이 비어있어요'); return }
-    if (!form.division && !form.dept && !form.team) { setError(`${ORG_LEVEL_LABEL.division}/${ORG_LEVEL_LABEL.dept}/${ORG_LEVEL_LABEL.team} 중 최소 하나는 있어야 해요`); return }
+    const division = orgVal('division'), dept = orgVal('dept'), team = orgVal('team')
+    if (!division && !dept && !team) { setError(`${ORG_LEVEL_LABEL.division}/${ORG_LEVEL_LABEL.dept}/${ORG_LEVEL_LABEL.team} 중 최소 하나는 있어야 해요`); return }
     if (!form.rank.trim()) { setError('직급이 비어있어요'); return }
     setSaving(true)
     // 휴직시작·종료일이 둘 다 있으면 그걸로 휴직연차를 자동 계산(우선), 없으면 휴직연차 칸을 그대로 씀
@@ -420,9 +440,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       name: form.name.trim(),
       join_date: form.join_date || null,
       locations: form.locations,
-      division: form.division.trim() || null,
-      dept: form.dept.trim() || null,
-      team: form.team.trim() || null,
+      division: division || null,
+      dept: dept || null,
+      team: team || null,
       rank: form.rank.trim(),
       role: form.role.trim() || null,
       track: form.track,
@@ -452,9 +472,15 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
         <LocationPicker value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.division}</label><input style={field} value={form.division} onChange={set('division')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.dept}</label><input style={field} value={form.dept} onChange={set('dept')} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>{ORG_LEVEL_LABEL.team}</label><input style={field} value={form.team} onChange={set('team')} /></div>
+          {['division', 'dept', 'team'].map((k) => (
+            <div key={k} style={{ flex: 1, minWidth: 0 }}>
+              <CascadeSelect
+                label={ORG_LEVEL_LABEL[k]} value={form[k]} options={orgOptions[k]}
+                onChange={(v) => { setForm({ ...form, [k]: v }); setCustom({ ...custom, [k]: '' }) }}
+                customValue={custom[k]} onCustomChange={(v) => setCustom({ ...custom, [k]: v })}
+              />
+            </div>
+          ))}
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
