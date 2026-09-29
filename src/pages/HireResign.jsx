@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept } from '../lib/constants'
-import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, todayStr } from '../components/ui'
+import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, CascadeSelect, todayStr } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
 import Resign from './Resign'
@@ -218,23 +218,6 @@ export default function HireResign() {
 
 // 부문→본부→팀처럼 상위 선택에 따라 하위 옵션이 좁혀지는 select. value가 목록에 없으면(직접입력) 텍스트 입력칸이 따로 뜸.
 // required=false면 맨 위 빈 옵션("없음")을 고를 수 있어 안 채워도 되고, required=true면 그 옵션이 비활성이라 뭔가 골라야 함.
-function CascadeSelect({ label, value, onChange, customValue, onCustomChange, options, required }) {
-  const isCustom = value === '__custom__'
-  return (
-    <>
-      <label style={lbl}>{label}</label>
-      <select style={field} required={required} value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="" disabled={required}>{required ? '선택하세요' : '(없음)'}</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-        <option value="__custom__">+ 새 {label} 직접 입력</option>
-      </select>
-      {isCustom && (
-        <input style={field} required={required} placeholder={`새 ${label}명`} value={customValue} onChange={(e) => onCustomChange(e.target.value)} />
-      )}
-    </>
-  )
-}
-
 // ═══ 입사자 등록 ═══
 function QuickAddHireModal({ onClose, onCreated }) {
   const [depts, setDepts] = useState([])
