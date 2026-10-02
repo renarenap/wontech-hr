@@ -73,6 +73,7 @@ const SELECTION_CSV_COLUMNS = [
   { key: 'orgPathStr', label: `소속(${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team})` },
   { key: 'rank', label: '직급' },
   { key: 'trackLabel', label: '직군' },
+  { key: 'join_date', label: '입사일' },
   { key: 'currentPts', label: '포인트' },
   { key: 'threshold', label: '진급기준' },
   { key: 'gapStr', label: '잔여' },
