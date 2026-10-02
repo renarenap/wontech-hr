@@ -47,7 +47,7 @@ const CSV_COLUMNS = [
   { key: 'leaveMonths', label: '휴직개월수(요율은 기준값 설정 참고, 체류연한에도 반영 · 시작·종료일 둘 다 있으면 자동계산되어 무시됨)' },
   { key: 'leave_start_date', label: '휴직시작일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'leave_end_date', label: '휴직종료일(YYYYMMDD 또는 YYYY-MM-DD)' },
-  { key: 'backfill_full_tenure', label: '경력직인정포인트 적용(TRUE/FALSE, 아니면 평가인정포인트로 계산)' },
+  { key: 'backfill_full_tenure', label: '경력직인정포인트 적용(TRUE/FALSE 수동지정, 입사한 해 7월2일 이후 입사자는 FALSE여도 자동 적용)' },
   { key: 'eng_pts', label: '영어점수' },
   { key: 'eng_lifetime', label: '영어평생인정(TRUE/FALSE)' },
   { key: 'cn_pts', label: '중국어점수' },
@@ -93,8 +93,9 @@ function backfillDetail(e) {
   if (!e.backfillPts) return { count: 0, grade: null, tooltip: '경력인정 P 대상 아님' }
   const rate = e.backfillRate || 0
   const lvl = e.level || 0
-  if (e.backfill_full_tenure) {
-    return { count: lvl, grade: nearestGrade(rate), tooltip: `경력직 인정포인트 · ${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P` }
+  if (e.backfillFullTenureEff) {
+    const why = e.backfill_full_tenure ? '수동 지정' : `입사일 ${e.join_date} 자동`
+    return { count: lvl, grade: nearestGrade(rate), tooltip: `경력직 인정포인트(${why}) · ${e.rank} ${rate}P/연차 × ${lvl}년 = ${e.backfillPts}P` }
   }
   // 경력직 인정포인트가 아닌 경우엔 평가인정포인트로 계산됨: 예상 반기 슬롯 - 실제 평가횟수(반기환산) 만큼을 기준점수 절반씩으로 채움
   const evaluated = evalCount(e.history)

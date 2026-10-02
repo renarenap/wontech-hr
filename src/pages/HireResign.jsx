@@ -6,6 +6,7 @@ import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
 import Resign from './Resign'
 import Onboarding, { DEFAULT_TASKS } from './Onboarding'
+import { isLateYearHire } from '../lib/promotion'
 
 function SectionTitle({ icon, children }) {
   return <div style={{ fontSize: 16, fontWeight: 800, margin: '28px 0 12px' }}>{icon} {children}</div>
@@ -364,9 +365,14 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
-          경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
+          경력직 인정포인트 수동 적용 (입사한 해 7월 2일 이후 입사자는 체크 안 해도 자동 적용)
         </label>
-        {backfillFullTenure && Number(level) === 0 && (
+        {isLateYearHire(joinDate) && (
+          <div style={{ fontSize: 11, color: '#2563eb', marginTop: -6, marginBottom: 10 }}>
+            입사일이 그 해 7월 2일 이후라 경력직 인정포인트가 자동으로 적용돼요.
+          </div>
+        )}
+        {(backfillFullTenure || isLateYearHire(joinDate)) && Number(level) === 0 && (
           <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
             인정 연차가 0이면 경력직 인정포인트도 0이 돼요 — 위에 연차를 입력해주세요.
           </div>

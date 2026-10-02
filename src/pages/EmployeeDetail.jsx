@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
 import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
-import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
+import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, isLateYearHire } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
 import { fetchNoteEntries, addNoteEntry, deleteNoteEntry } from '../lib/noteEntries'
@@ -499,8 +499,13 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />
-          경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
+          경력직 인정포인트 수동 적용 (입사한 해 7월 2일 이후 입사자는 체크 안 해도 자동 적용)
         </label>
+        {isLateYearHire(form.join_date) && (
+          <div style={{ fontSize: 11, color: '#2563eb', marginTop: -6, marginBottom: 10 }}>
+            입사일이 그 해 7월 2일 이후라 경력직 인정포인트가 자동으로 적용돼요.
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}><label style={lbl}>휴직시작일</label><input style={field} type="date" value={form.leave_start_date} onChange={set('leave_start_date')} /></div>

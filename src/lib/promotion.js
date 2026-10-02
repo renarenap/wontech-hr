@@ -70,6 +70,18 @@ export function computeBackfill(level, R, rankCriteria, backfillFullTenure) {
   return Math.max(0, Math.round((((lvl - 1) * 2 - R) * rate / 2) * 10) / 10)
 }
 
+// 입사한 그 해 7월 2일 이후 입사자인지 — 당해년도 평가 미대상이라 경력직 인정포인트(연차 전체 × 기준점수)로 자동 계산
+// join_date는 'YYYY-MM-DD'(DB date) 기준, 비어있거나 형식이 다르면 false
+export function isLateYearHire(joinDate) {
+  const m = /^\d{4}-?(\d{2})-?(\d{2})/.exec(String(joinDate || ''))
+  return !!m && `${m[1]}-${m[2]}` >= '07-02'
+}
+
+// 경력직 인정포인트 적용 여부 = 담당자가 체크박스로 수동 지정했거나, 입사일 기준 자동 해당
+export function usesFullTenureBackfill(employee) {
+  return !!employee.backfill_full_tenure || isLateYearHire(employee.join_date)
+}
+
 // 외국어필수 승진 게이트 대상 직급 (과장/차장만 — 부장은 기준 자체가 없어 'na' 상태로 별도 처리됨)
 const LANG_GATE_RANKS = ['과장', '차장']
 
@@ -109,7 +121,9 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   const hasCriteria = req_tenure > 0 || threshold > 0
 
   const R = evalCount(evaluations)
-  const backfillPts = hasCriteria ? computeBackfill(employee.level, R, rc, employee.backfill_full_tenure) : 0
+  const backfillFullTenureAuto = isLateYearHire(employee.join_date)
+  const backfillFullTenureEff = !!employee.backfill_full_tenure || backfillFullTenureAuto
+  const backfillPts = hasCriteria ? computeBackfill(employee.level, R, rc, backfillFullTenureEff) : 0
   // 휴직: 평가 없이 연차당 무조건 6P(직급 기준점수와 무관) + 체류연한에도 그대로 합산
   // (경력직/평가 인정포인트와 별개 항목이라 겹쳐 계산되지 않음 — computeBackfill은 employee.level만 보고 계산됨)
   const leaveYears = Math.max(0, employee.leave_years || 0)
@@ -168,7 +182,7 @@ export function deriveEmployee(employee, evaluations, rankCriteriaMap, leaveRate
   }
 
   return {
-    ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0,
+    ...employee, evalPts: evalPtsSum, backfillPts, backfillRate: rc?.backfill_rate || 0, backfillFullTenureAuto, backfillFullTenureEff,
     leaveYears, leavePts, leaveRate, effectiveLevel, onLeaveNow, addPts, minusYearAdj, pendingAdj, currentPts, gap, evalWindow,
     req_tenure, threshold, tenureMet, ptsMet, hasCriteria, engGated, engOk, status, issues,
   }
