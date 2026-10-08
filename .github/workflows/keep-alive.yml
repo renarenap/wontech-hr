@@ -1,0 +1,26 @@
+name: Supabase keep-alive
+
+# Supabase 무료 플랜은 7일 동안 요청이 없으면 프로젝트를 일시정지(pause)합니다.
+# 주 2회 DB에 가벼운 조회를 보내 활동 상태를 유지합니다.
+on:
+  schedule:
+    - cron: '0 0 * * 1,4' # 매주 월·목 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/rank_criteria?select=*&limit=1")
+          echo "HTTP $status"
+          test "$status" -lt 400
