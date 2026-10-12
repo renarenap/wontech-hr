@@ -309,8 +309,15 @@ function QuickAddHireModal({ onClose, onCreated }) {
     if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
+    // 같은 이름이 이미 있으면 동명이인인지(진짜 다른 사람인지) 한 번 확인 — 같은 사람을 실수로 두 번 등록하는 걸 막기 위함
+    const { data: sameName, error: eDup } = await supabase.from('employees').select('name, division, dept, team, rank, join_date').eq('name', name.trim())
+    if (eDup) { setError(eDup.message); setSaving(false); return }
+    if (sameName?.length > 0) {
+      const list = sameName.map((e) => `· ${e.name} (${orgPath(e) || '소속 없음'} · ${e.rank || '-'}${e.join_date ? ` · 입사 ${e.join_date}` : ''})`).join('\n')
+      if (!window.confirm(`같은 이름의 직원이 이미 있어요:\n${list}\n\n동명이인(다른 사람)이 맞으면 [확인]을 눌러 등록해주세요.`)) { setSaving(false); return }
+    }
     try {
-      await addHireToRoster({ name, division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -635,8 +642,11 @@ function classify(parsed, employees, archived) {
         return
       }
       const existing = byName.get(h.name) || []
-      if (existing.length > 0) {
+      // 같은 이름 + 같은 입사일이면 이미 등록된 같은 사람, 이름만 같으면 동명이인일 수 있어서 확인 후 반영할 수 있게 열어둠
+      if (existing.some((e) => e.join_date && e.join_date === h.date)) {
         out.push({ key, kind: 'hire', status: 'already_exists', ...h, month })
+      } else if (existing.length > 0) {
+        out.push({ key, kind: 'hire', status: 'homonym', ...h, month, sameNameEmployees: existing })
       } else {
         out.push({ key, kind: 'hire', status: 'new', ...h, month })
       }
@@ -665,6 +675,7 @@ const STATUS_CFG = {
   already_processed: { label: '이미 처리됨', c: '#64748b', bg: '#f1f5f9', selectable: false },
   rank_untracked: { label: '승진포인트 대상 아님', c: '#92400e', bg: '#fef3c7', selectable: false },
   not_found: { label: '명단에서 못 찾음 · 확인 필요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
+  homonym: { label: '동명이인 확인 필요 · 다른 사람이면 체크', c: '#b45309', bg: '#ffedd5', selectable: true },
   ambiguous: { label: '동명이인 있음 · 직접 등록해주세요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
   parse_failed: { label: '형식 인식 실패 · 직접 등록해주세요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
 }
@@ -698,6 +709,11 @@ function ChangeGroup({ title, items, checked, onToggle, kind }) {
                   ) : (
                     <>
                       <b>{r.name}</b> <span style={{ color: '#64748b' }}>{r.rank} · {r.dept} · {r.date}{kind === 'resign' && r.tenure != null ? ` · 근속 ${r.tenure}년` : ''}</span>
+                      {r.sameNameEmployees?.map((e) => (
+                        <div key={e.id} style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                          기존: {e.name} · {orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
+                        </div>
+                      ))}
                     </>
                   )}
                 </span>
