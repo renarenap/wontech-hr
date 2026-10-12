@@ -225,6 +225,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [teams, setTeams] = useState([])
   const [deptsByDivision, setDeptsByDivision] = useState({})
   const [teamsByDept, setTeamsByDept] = useState({})
+  const [teamsByDivision, setTeamsByDivision] = useState({})
   const [name, setName] = useState('')
   const [locations, setLocations] = useState([])
   const [division, setDivision] = useState('')
@@ -265,6 +266,14 @@ function QuickAddHireModal({ onClose, onCreated }) {
         ;(byDept[r.dept] ??= new Set()).add(r.team)
       })
       setTeamsByDept(Object.fromEntries(Object.entries(byDept).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
+
+      // 본부 없이 부문→팀으로 바로 이어지는 조직도 있어서, 본부를 안 고르면 부문 기준으로 팀을 좁힘
+      const byDivisionTeam = {}
+      rows.forEach((r) => {
+        if (!r.division || !r.team) return
+        ;(byDivisionTeam[r.division] ??= new Set()).add(r.team)
+      })
+      setTeamsByDivision(Object.fromEntries(Object.entries(byDivisionTeam).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
     })
   }, [])
 
@@ -273,7 +282,9 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const teamVal = team === '__custom__' ? customTeam.trim() : team
   // 부문을 고르고 그 부문 밑에 실제 본부가 있으면 그것만, 없으면(부문을 안 골랐거나 데이터가 없으면) 전체 본부 목록
   const deptOptions = (divisionVal && deptsByDivision[divisionVal]?.length) ? deptsByDivision[divisionVal] : depts
-  const teamOptions = (deptVal && teamsByDept[deptVal]?.length) ? teamsByDept[deptVal] : teams
+  const teamOptions = (deptVal && teamsByDept[deptVal]?.length) ? teamsByDept[deptVal]
+    : (!deptVal && divisionVal && teamsByDivision[divisionVal]?.length) ? teamsByDivision[divisionVal]
+    : teams
   const isResearch = RESEARCH_RANKS.includes(rank)
 
   // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
@@ -290,13 +301,23 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!deptVal) { setError(`${ORG_LEVEL_LABEL.dept}을 선택하거나 입력해주세요.`); return }
+    // 본부가 없는 조직(부문→팀)도 있어서 본부는 필수 아님 — 부문/본부/팀 중 하나만 있으면 됨
+    if (!divisionVal && !deptVal && !teamVal) {
+      setError(`${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return
+    }
     if (!rank) { setError('직위를 선택해주세요.'); return }
     if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
+    // 같은 이름이 이미 있으면 동명이인인지(진짜 다른 사람인지) 한 번 확인 — 같은 사람을 실수로 두 번 등록하는 걸 막기 위함
+    const { data: sameName, error: eDup } = await supabase.from('employees').select('name, division, dept, team, rank, join_date').eq('name', name.trim())
+    if (eDup) { setError(eDup.message); setSaving(false); return }
+    if (sameName?.length > 0) {
+      const list = sameName.map((e) => `· ${e.name} (${orgPath(e) || '소속 없음'} · ${e.rank || '-'}${e.join_date ? ` · 입사 ${e.join_date}` : ''})`).join('\n')
+      if (!window.confirm(`같은 이름의 직원이 이미 있어요:\n${list}\n\n동명이인(다른 사람)이 맞으면 [확인]을 눌러 등록해주세요.`)) { setSaving(false); return }
+    }
     try {
-      await addHireToRoster({ name, division: divisionVal || null, dept: deptVal, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -320,7 +341,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <CascadeSelect
           label={ORG_LEVEL_LABEL.dept} value={dept} onChange={changeDept}
-          customValue={customDept} onCustomChange={setCustomDept} options={deptOptions} required
+          customValue={customDept} onCustomChange={setCustomDept} options={deptOptions}
         />
 
         <CascadeSelect
@@ -360,15 +381,18 @@ function QuickAddHireModal({ onClose, onCreated }) {
         )}
 
         <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
-        <input style={field} type="number" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <input style={field} type="number" step="1" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+          신입이면 0, 아직 승진요건 연차가 안 찬 경우엔 마이너스(예: -1)로 입력해도 됩니다.
+        </div>
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
           경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
         </label>
-        {backfillFullTenure && Number(level) === 0 && (
-          <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
-            인정 연차가 0이면 경력직 인정포인트도 0이 돼요 — 위에 연차를 입력해주세요.
+        {backfillFullTenure && (Number(level) || 0) <= 0 && (
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+            참고: 인정 연차가 0 이하라 경력직 인정포인트는 0점으로 계산돼요.
           </div>
         )}
 
@@ -618,8 +642,11 @@ function classify(parsed, employees, archived) {
         return
       }
       const existing = byName.get(h.name) || []
-      if (existing.length > 0) {
+      // 같은 이름 + 같은 입사일이면 이미 등록된 같은 사람, 이름만 같으면 동명이인일 수 있어서 확인 후 반영할 수 있게 열어둠
+      if (existing.some((e) => e.join_date && e.join_date === h.date)) {
         out.push({ key, kind: 'hire', status: 'already_exists', ...h, month })
+      } else if (existing.length > 0) {
+        out.push({ key, kind: 'hire', status: 'homonym', ...h, month, sameNameEmployees: existing })
       } else {
         out.push({ key, kind: 'hire', status: 'new', ...h, month })
       }
@@ -648,6 +675,7 @@ const STATUS_CFG = {
   already_processed: { label: '이미 처리됨', c: '#64748b', bg: '#f1f5f9', selectable: false },
   rank_untracked: { label: '승진포인트 대상 아님', c: '#92400e', bg: '#fef3c7', selectable: false },
   not_found: { label: '명단에서 못 찾음 · 확인 필요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
+  homonym: { label: '동명이인 확인 필요 · 다른 사람이면 체크', c: '#b45309', bg: '#ffedd5', selectable: true },
   ambiguous: { label: '동명이인 있음 · 직접 등록해주세요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
   parse_failed: { label: '형식 인식 실패 · 직접 등록해주세요', c: '#b91c1c', bg: '#fee2e2', selectable: false },
 }
@@ -681,6 +709,11 @@ function ChangeGroup({ title, items, checked, onToggle, kind }) {
                   ) : (
                     <>
                       <b>{r.name}</b> <span style={{ color: '#64748b' }}>{r.rank} · {r.dept} · {r.date}{kind === 'resign' && r.tenure != null ? ` · 근속 ${r.tenure}년` : ''}</span>
+                      {r.sameNameEmployees?.map((e) => (
+                        <div key={e.id} style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                          기존: {e.name} · {orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
+                        </div>
+                      ))}
                     </>
                   )}
                 </span>
