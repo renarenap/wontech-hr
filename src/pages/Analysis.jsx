@@ -312,7 +312,8 @@ function CountChart({ total, caption, bars, animKey }) {
 }
 
 // 지역 비율: 100% 누적 가로막대 + 구간마다 직접 라벨(색만으로 구분하지 않게) + 아래 범례
-function LocationChart({ list, animKey }) {
+// locSort/onLocSort: 막대나 범례의 지역을 누르면 그 지역 사람이 명단 맨 위로 오게 정렬 — 같은 지역을 다시 누르면 해제
+function LocationChart({ list, animKey, locSort, onLocSort }) {
   const { bind, el } = useChartTip()
   const { on, tr } = useGrow(animKey)
   const locCount = {}
@@ -327,12 +328,17 @@ function LocationChart({ list, animKey }) {
   const pct = (l) => Math.round((locCount[l] / sum) * 100)
   return (
     <div style={chartCard} data-chart>
-      <div style={chartTitle}>지역 비율</div>
+      <div style={chartTitle}>
+        지역 비율 <span style={hint}>· {locSort ? `${shortLoc(locSort)} 먼저 정렬 중 (다시 누르면 해제)` : '누르면 그 지역 순으로 정렬'}</span>
+      </div>
       <div style={{ display: 'flex', gap: 2, height: 34, marginBottom: 12, background: '#eef2f6', borderRadius: 4 }}>
         {order.map((l, i) => (
           <div
-            key={l} {...bind(`${l}: ${locCount[l]}명 (${pct(l)}%)`)}
+            key={l} {...bind(`${l}: ${locCount[l]}명 (${pct(l)}%) · 누르면 ${shortLoc(l)} 먼저 정렬`)}
+            onClick={() => onLocSort?.(locSort === l ? null : l)}
             style={{
+              cursor: onLocSort ? 'pointer' : 'default', opacity: locSort && locSort !== l ? 0.35 : 1,
+              outline: locSort === l ? '2px solid #111827' : 'none', outlineOffset: 1,
               width: on ? `${(locCount[l] / sum) * 100}%` : 0, background: LOC_COLOR[l], borderRadius: 4, minWidth: on ? 4 : 0, transition: tr('width', i),
               display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               color: l === '미지정' ? '#475569' : '#fff', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
@@ -344,7 +350,13 @@ function LocationChart({ list, animKey }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
         {order.map((l) => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12 }}>
+          <div
+            key={l} onClick={() => onLocSort?.(locSort === l ? null : l)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, cursor: onLocSort ? 'pointer' : 'default', borderRadius: 4, padding: '1px 4px', margin: '0 -4px',
+              background: locSort === l ? '#e2e8f0' : 'transparent', fontWeight: locSort === l ? 700 : 400, opacity: locSort && locSort !== l ? 0.5 : 1,
+            }}
+          >
             <span style={{ width: 10, height: 10, borderRadius: 2, background: LOC_COLOR[l], flexShrink: 0 }} />
             <span style={{ flex: 1 }}>{shortLoc(l)}</span>
             <b>{locCount[l]}명</b>
@@ -395,16 +407,23 @@ function DeptRankChart({ list, population, animKey }) {
 
 // list: 지금 보여주는 명단 / population: 같은 필터(직군·본부)가 걸린 전체 인원 — 본부별 비율 분모
 // countBars/countCaption: 인원수 카드의 구분별 막대(탭마다 다름)
-function ListSummary({ list, population, countBars = [], countCaption, animKey: extraKey = '' }) {
+function ListSummary({ list, population, countBars = [], countCaption, animKey: extraKey = '', locSort, onLocSort }) {
   // 명단이 바뀌면(필터·등급 선택 등) 그래프를 다시 채움
   const animKey = `${extraKey}|${list.length}|${list[0]?.id || ''}|${list[list.length - 1]?.id || ''}`
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 16 }}>
       <CountChart total={list.length} caption={countCaption} bars={countBars} animKey={animKey} />
-      {list.length > 0 ? <LocationChart list={list} animKey={animKey} /> : <div style={chartCard}><div style={chartTitle}>지역 비율</div><EmptyState /></div>}
+      {list.length > 0 ? <LocationChart list={list} animKey={animKey} locSort={locSort} onLocSort={onLocSort} /> : <div style={chartCard}><div style={chartTitle}>지역 비율</div><EmptyState /></div>}
       {list.length > 0 ? <DeptRankChart list={list} population={population} animKey={animKey} /> : <div style={chartCard}><div style={chartTitle}>본부 순위</div><EmptyState /></div>}
     </div>
   )
+}
+
+// 지역 그래프에서 고른 지역(loc) 소속인 사람을 위로 — 나머지 순서는 원래 정렬 그대로 유지(안정 정렬). '미지정'은 지역 없는 사람
+function sortByLoc(list, loc) {
+  if (!loc) return list
+  const has = (e) => (loc === '미지정' ? !e.locations?.length : (e.locations || []).includes(loc))
+  return [...list].sort((a, b) => has(b) - has(a))
 }
 
 // 명단을 key별로 세서 인원수 막대용 [{label, value, active}]로 — 인원 많은 순, 5개 넘으면 나머지는 "기타"
@@ -452,6 +471,7 @@ function DownloadButton({ filename, rows, columns }) {
 const isExecCandidate = (e) => EXEC_CANDIDATE_RANKS.includes(baseRank(e.rank))
 
 function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncludeAlready, includeExec, setIncludeExec, goTo }) {
+  const [locSort, setLocSort] = useState(null)
   const allTracked = rows.filter((e) => e.hasCriteria)
   const tracked = includeExec ? allTracked : allTracked.filter((e) => !isExecCandidate(e))
   const execCount = allTracked.filter((e) => isExecCandidate(e)
@@ -528,6 +548,7 @@ function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncl
           </div>
         </div>
         <ListSummary
+          locSort={locSort} onLocSort={setLocSort}
           list={list} population={rows} countCaption={`올해 ${gradeText(grade)} 이상 기준`}
           animKey={`${grade}|${includeAlready}|${includeExec}`}
           countBars={[
@@ -549,7 +570,7 @@ function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncl
                 </tr>
               </thead>
               <tbody>
-                {list.map((e) => {
+                {sortByLoc(list, locSort).map((e) => {
                   const pr = e.outlook.projections
                   const cell = (g) => {
                     const p = pr?.[g]
@@ -600,6 +621,7 @@ function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncl
 
 // ─── 2. 고과 우수자 ───
 function GoodSection({ rows, goTo, recentN, setRecentN, goodMin, setGoodMin, minStreak, setMinStreak }) {
+  const [locSort, setLocSort] = useState(null)
   const list = rows
     .filter((e) => e.trend.streak >= minStreak)
     .sort((a, b) => b.trend.streak - a.trend.streak || (b.trend.avg || 0) - (a.trend.avg || 0))
@@ -624,19 +646,20 @@ function GoodSection({ rows, goTo, recentN, setRecentN, goodMin, setGoodMin, min
           <DownloadButton filename="고과우수자" rows={list.map(goodCsvRow)} columns={GOOD_CSV_COLS} />
         </div>
       </div>
-      <ListSummary list={list} population={rows} countCaption="직급별" countBars={countBy(list, (e) => baseRank(e.rank))} />
+      <ListSummary locSort={locSort} onLocSort={setLocSort} list={list} population={rows} countCaption="직급별" countBars={countBy(list, (e) => baseRank(e.rank))} />
       {list.length === 0 ? <EmptyState label="조건에 맞는 직원이 없습니다" /> : (
         <div style={{ maxHeight: 600, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>{['이름', '직급', '본부', '연속 우수', `최근 ${recentN}회`, '평균(10점)', '추세', '승진 상태', '올해 평가 반영 예상'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
+              <tr>{['이름', '직급', '본부', '지역', '연속 우수', `최근 ${recentN}회`, '평균(10점)', '추세', '승진 상태', '올해 평가 반영 예상'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {list.map((e) => (
+              {sortByLoc(list, locSort).map((e) => (
                 <RowHover key={e.id} onClick={() => goTo(e.id)}>
                   <td style={nameTd}>{e.name}</td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}>{e.dept || '—'}</td>
+                  <td style={tdS}>{(e.locations || []).map(shortLoc).join('·') || '—'}</td>
                   <td style={{ ...tdS, color: O, fontWeight: 800 }}>{e.trend.streak}회</td>
                   <td style={tdS}><RecentGrades list={e.trend.recent} /></td>
                   <td style={{ ...tdS, fontWeight: 700 }}>{e.trend.avg ?? '—'}</td>
@@ -703,6 +726,7 @@ function OutlookBadge({ outlook }) {
 
 // ─── 3. 주의 대상 ───
 function WatchSection({ rows, goTo, recentN }) {
+  const [locSort, setLocSort] = useState(null)
   const [reason, setReason] = useState('all')
   const flagged = rows.filter((e) => e.watch.length > 0)
   const list = flagged
@@ -737,6 +761,7 @@ function WatchSection({ rows, goTo, recentN }) {
           </div>
         </div>
         <ListSummary
+          locSort={locSort} onLocSort={setLocSort}
           list={list} population={rows} countCaption="사유별 (중복 포함)"
           countBars={Object.entries(WATCH_REASON).map(([k, w]) => ({ label: w.label, value: list.filter((e) => e.watch.includes(k)).length, active: true }))}
         />
@@ -744,14 +769,15 @@ function WatchSection({ rows, goTo, recentN }) {
           <div style={{ maxHeight: 560, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr>{['이름', '직급', '본부', '사유', `최근 ${recentN}회`, '평균(10점)', '추세', '포인트', '연차'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
+                <tr>{['이름', '직급', '본부', '지역', '사유', `최근 ${recentN}회`, '평균(10점)', '추세', '포인트', '연차'].map((h) => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
-                {list.map((e) => (
+                {sortByLoc(list, locSort).map((e) => (
                   <RowHover key={e.id} onClick={() => goTo(e.id)}>
                     <td style={nameTd}>{e.name}</td>
                     <td style={tdS}>{e.rank}</td>
                     <td style={tdS}>{e.dept || '—'}</td>
+                    <td style={tdS}>{(e.locations || []).map(shortLoc).join('·') || '—'}</td>
                     <td style={tdS}>
                       <span style={{ display: 'inline-flex', gap: 4 }}>
                         {e.watch.map((k) => <Bd key={k} color={WATCH_REASON[k].color} bg={WATCH_REASON[k].bg}>{WATCH_REASON[k].label}</Bd>)}
