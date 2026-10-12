@@ -227,6 +227,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [teamsByDept, setTeamsByDept] = useState({})
   const [teamsByDivision, setTeamsByDivision] = useState({})
   const [name, setName] = useState('')
+  const [roster, setRoster] = useState([])
   const [locations, setLocations] = useState([])
   const [division, setDivision] = useState('')
   const [customDivision, setCustomDivision] = useState('')
@@ -244,7 +245,8 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('employees').select('division, dept, team').then(({ data }) => {
+    supabase.from('employees').select('id, name, division, dept, team, rank, join_date').then(({ data }) => {
+      setRoster(data || [])
       // 본부는 조직도 기준 목록 + 실제 데이터를 합쳐서, 부문·팀은 실제 데이터에 있는 값만 — 각각 전체 드롭다운으로 보여줌
       const rows = data || []
       const liveDept = rows.map((r) => r.dept).filter(Boolean)
@@ -286,6 +288,15 @@ function QuickAddHireModal({ onClose, onCreated }) {
     : (!deptVal && divisionVal && teamsByDivision[divisionVal]?.length) ? teamsByDivision[divisionVal]
     : teams
   const isResearch = RESEARCH_RANKS.includes(rank)
+  // 이름을 치는 대로 기존 직원 중 이름이 겹치는 사람을 바로 보여줌 (동명이인·중복 등록 확인용) — 같은 이름이 맨 위
+  const nameMatches = useMemo(() => {
+    const q = name.trim().toLowerCase()
+    if (!q) return []
+    return roster
+      .filter((e) => e.name?.toLowerCase().includes(q))
+      .sort((a, b) => (b.name.trim().toLowerCase() === q) - (a.name.trim().toLowerCase() === q) || a.name.localeCompare(b.name, 'ko'))
+      .slice(0, 6)
+  }, [roster, name])
 
   // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
   const changeDivision = (v) => { setDivision(v); setCustomDivision(''); setDept(''); setCustomDept(''); setTeam(''); setCustomTeam('') }
@@ -329,7 +340,20 @@ function QuickAddHireModal({ onClose, onCreated }) {
     <Modal title="입사자 등록" onClose={onClose}>
       <form onSubmit={submit}>
         <label style={lbl}>이름</label>
-        <input style={field} required value={name} onChange={(e) => setName(e.target.value)} />
+        <input style={field} required value={name} onChange={(e) => setName(e.target.value)} placeholder="이름을 입력하면 기존 직원을 바로 검색해요" />
+        {nameMatches.length > 0 && (
+          <div style={{ border: '1px solid #fed7aa', background: '#fff7ed', borderRadius: 8, padding: '8px 10px', marginTop: -6, marginBottom: 10, fontSize: 12 }}>
+            <div style={{ color: '#b45309', fontWeight: 600, marginBottom: 4 }}>
+              {nameMatches.some((e) => e.name === name.trim()) ? '⚠️ 같은 이름의 직원이 이미 있어요 — 동명이인이 맞는지 확인해주세요' : '비슷한 이름의 기존 직원'}
+            </div>
+            {nameMatches.map((e) => (
+              <div key={e.id} style={{ color: '#475569', padding: '2px 0' }}>
+                <b>{e.name}</b>
+                <span style={{ color: '#94a3b8', marginLeft: 8 }}>{orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         <label style={lbl}>위치</label>
         <LocationPicker value={locations} onChange={setLocations} />
