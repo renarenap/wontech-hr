@@ -225,6 +225,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [teams, setTeams] = useState([])
   const [deptsByDivision, setDeptsByDivision] = useState({})
   const [teamsByDept, setTeamsByDept] = useState({})
+  const [teamsByDivision, setTeamsByDivision] = useState({})
   const [name, setName] = useState('')
   const [locations, setLocations] = useState([])
   const [division, setDivision] = useState('')
@@ -265,6 +266,14 @@ function QuickAddHireModal({ onClose, onCreated }) {
         ;(byDept[r.dept] ??= new Set()).add(r.team)
       })
       setTeamsByDept(Object.fromEntries(Object.entries(byDept).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
+
+      // 본부 없이 부문→팀으로 바로 이어지는 조직도 있어서, 본부를 안 고르면 부문 기준으로 팀을 좁힘
+      const byDivisionTeam = {}
+      rows.forEach((r) => {
+        if (!r.division || !r.team) return
+        ;(byDivisionTeam[r.division] ??= new Set()).add(r.team)
+      })
+      setTeamsByDivision(Object.fromEntries(Object.entries(byDivisionTeam).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
     })
   }, [])
 
@@ -273,7 +282,9 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const teamVal = team === '__custom__' ? customTeam.trim() : team
   // 부문을 고르고 그 부문 밑에 실제 본부가 있으면 그것만, 없으면(부문을 안 골랐거나 데이터가 없으면) 전체 본부 목록
   const deptOptions = (divisionVal && deptsByDivision[divisionVal]?.length) ? deptsByDivision[divisionVal] : depts
-  const teamOptions = (deptVal && teamsByDept[deptVal]?.length) ? teamsByDept[deptVal] : teams
+  const teamOptions = (deptVal && teamsByDept[deptVal]?.length) ? teamsByDept[deptVal]
+    : (!deptVal && divisionVal && teamsByDivision[divisionVal]?.length) ? teamsByDivision[divisionVal]
+    : teams
   const isResearch = RESEARCH_RANKS.includes(rank)
 
   // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
@@ -290,13 +301,16 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!deptVal) { setError(`${ORG_LEVEL_LABEL.dept}을 선택하거나 입력해주세요.`); return }
+    // 본부가 없는 조직(부문→팀)도 있어서 본부는 필수 아님 — 부문/본부/팀 중 하나만 있으면 됨
+    if (!divisionVal && !deptVal && !teamVal) {
+      setError(`${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return
+    }
     if (!rank) { setError('직위를 선택해주세요.'); return }
     if (!track) { setError('직군을 선택해주세요.'); return }
 
     setSaving(true)
     try {
-      await addHireToRoster({ name, division: divisionVal || null, dept: deptVal, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      await addHireToRoster({ name, division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
       onCreated()
     } catch (err) {
       setError(err.message)
@@ -320,7 +334,7 @@ function QuickAddHireModal({ onClose, onCreated }) {
 
         <CascadeSelect
           label={ORG_LEVEL_LABEL.dept} value={dept} onChange={changeDept}
-          customValue={customDept} onCustomChange={setCustomDept} options={deptOptions} required
+          customValue={customDept} onCustomChange={setCustomDept} options={deptOptions}
         />
 
         <CascadeSelect
@@ -360,15 +374,18 @@ function QuickAddHireModal({ onClose, onCreated }) {
         )}
 
         <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
-        <input style={field} type="number" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <input style={field} type="number" step="1" value={level} onChange={(e) => setLevel(e.target.value)} />
+        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+          신입이면 0, 아직 승진요건 연차가 안 찬 경우엔 마이너스(예: -1)로 입력해도 됩니다.
+        </div>
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={backfillFullTenure} onChange={(e) => setBackfillFullTenure(e.target.checked)} />
           경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
         </label>
-        {backfillFullTenure && Number(level) === 0 && (
-          <div style={{ fontSize: 11, color: '#dc2626', marginTop: -6, marginBottom: 10 }}>
-            인정 연차가 0이면 경력직 인정포인트도 0이 돼요 — 위에 연차를 입력해주세요.
+        {backfillFullTenure && (Number(level) || 0) <= 0 && (
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
+            참고: 인정 연차가 0 이하라 경력직 인정포인트는 0점으로 계산돼요.
           </div>
         )}
 
