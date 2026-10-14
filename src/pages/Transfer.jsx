@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, R, B, DEPT_OPTIONS, orgPath } from '../lib/constants'
-import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
+import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton, CascadeSelect } from '../components/ui'
 
 const TYPE_CFG = {
   부서이동: { c: B, bg: '#e0f2fe' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
@@ -107,7 +107,10 @@ function AddTransferModal({ onClose, onCreated }) {
   })
   const [employees, setEmployees] = useState([])
   const [picked, setPicked] = useState(null)
-  const [toDeptSel, setToDeptSel] = useState('') // 부서이동일 때 "변경 후" 선택값 — '' | '__custom__' | 실제 팀명
+  // 부서이동일 때 "변경 후" 소속 — 부문/본부/팀 각각 '' | '__custom__' | 기존 값 (직접 입력값은 custom에)
+  const [to, setTo] = useState({ division: '', dept: '', team: '' })
+  const [toCustom, setToCustom] = useState({ division: '', dept: '', team: '' })
+  const [applyOrg, setApplyOrg] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -116,11 +119,22 @@ function AddTransferModal({ onClose, onCreated }) {
     supabase.from('employees').select('id, name, division, dept, team, locations, rank').order('name').then(({ data }) => setEmployees(data || []))
   }, [])
 
-  // 조직도 기준 팀 목록 + 실제 employees 데이터에 있는 팀을 합쳐서 "변경 후" 선택지로 씀
-  const deptOptions = useMemo(() => {
-    const live = employees.map((e) => e.dept).filter(Boolean)
-    return [...new Set([...DEPT_OPTIONS, ...live])].sort((a, b) => a.localeCompare(b, 'ko'))
-  }, [employees])
+  const toVal = (k) => (to[k] === '__custom__' ? toCustom[k].trim() : to[k]) || null
+  const toOrg = { division: toVal('division'), dept: toVal('dept'), team: toVal('team') }
+
+  // "변경 후" 선택지 — 실제 employees 데이터의 부문/본부/팀 조합(+ 조직도 기준 본부 목록).
+  // 상위 단계를 고르면 그 밑에 실제로 있는 것만 보여주고, 없으면 전체 목록
+  const orgOptions = useMemo(() => {
+    const uniq = (arr) => [...new Set(arr.filter(Boolean).map((v) => v.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'))
+    const under = (k, filters) => uniq(employees.filter((e) => Object.entries(filters).every(([fk, fv]) => !fv || e[fk]?.trim() === fv)).map((e) => e[k]))
+    const depts = toOrg.division ? under('dept', { division: toOrg.division }) : []
+    const teams = toOrg.dept ? under('team', { dept: toOrg.dept }) : toOrg.division ? under('team', { division: toOrg.division }) : []
+    return {
+      division: uniq(employees.map((e) => e.division)),
+      dept: depts.length ? depts : uniq([...DEPT_OPTIONS, ...employees.map((e) => e.dept)]),
+      team: teams.length ? teams : uniq(employees.map((e) => e.team)),
+    }
+  }, [employees, toOrg.division, toOrg.dept])
 
   const matches = useMemo(() => {
     if (picked || !form.name.trim()) return []
@@ -134,17 +148,23 @@ function AddTransferModal({ onClose, onCreated }) {
       ...f, name: e.name, rank: f.rank || e.rank,
       from_value: f.from_value || orgPath(e),
     }))
+    // 변경 후 소속은 현재 소속으로 채워두고, 바뀌는 칸만 고르면 되게
+    setTo({ division: e.division?.trim() || '', dept: e.dept?.trim() || '', team: e.team?.trim() || '' })
+    setToCustom({ division: '', dept: '', team: '' })
   }
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     if (form.type === '휴직' && !form.leave_start) { setError('휴직시작일을 입력해주세요.'); return }
+    const isMove = form.type === '부서이동'
+    if (isMove && !orgPath(toOrg)) { setError(`변경 후 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return }
     setSaving(true)
     // 휴직 유형은 변경전/후 대신 휴직시작~종료일을 그대로 그 두 칸에 담음(스키마 변경 없이 재사용)
+    // 부서이동은 "변경 후"에 부문 · 본부 · 팀을 이어 붙여 저장
     const payload = form.type === '휴직'
       ? { ...form, from_value: form.leave_start, to_value: form.leave_end || '(진행중)' }
-      : form
+      : isMove ? { ...form, to_value: orgPath(toOrg) } : form
     const { leave_start, leave_end, ...rest } = payload
     const { error } = await supabase.from('transfers').insert({ ...rest, employee_id: picked?.id || null })
     if (error) { setSaving(false); setError(error.message); return }
@@ -157,6 +177,12 @@ function AddTransferModal({ onClose, onCreated }) {
       if (months !== null) empPatch.leave_years = months / 12
       const { error: empErr } = await supabase.from('employees').update(empPatch).eq('id', picked.id)
       if (empErr) { setSaving(false); setError(`발령은 등록됐지만 직원 정보 반영에 실패했어요: ${empErr.message}`); return }
+    }
+
+    // 부서이동 발령이고 명단에 있는 직원이면 실제 소속(부문/본부/팀)도 바로 바꿈 — 반려 건은 제외
+    if (isMove && picked?.id && applyOrg && form.status !== '반려') {
+      const { error: empErr } = await supabase.from('employees').update(toOrg).eq('id', picked.id)
+      if (empErr) { setSaving(false); setError(`발령은 등록됐지만 소속 변경에 실패했어요: ${empErr.message}`); return }
     }
 
     setSaving(false)
@@ -219,21 +245,30 @@ function AddTransferModal({ onClose, onCreated }) {
             <label style={lbl}>변경 후</label>
             {form.type === '부서이동' ? (
               <>
-                <select
-                  style={field} required
-                  value={toDeptSel || (deptOptions.includes(form.to_value) ? form.to_value : (form.to_value ? '__custom__' : ''))}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setToDeptSel(v)
-                    setForm({ ...form, to_value: v === '__custom__' ? '' : v })
-                  }}
-                >
-                  <option value="" disabled>팀을 선택하세요</option>
-                  {deptOptions.map((d) => <option key={d} value={d}>{d}</option>)}
-                  <option value="__custom__">+ 새 팀 직접 입력</option>
-                </select>
-                {(toDeptSel === '__custom__' || (!toDeptSel && form.to_value && !deptOptions.includes(form.to_value))) && (
-                  <input style={field} required placeholder="새 팀명" value={form.to_value} onChange={set('to_value')} />
+                <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px 2px', marginBottom: 10 }}>
+                  {['division', 'dept', 'team'].map((k) => (
+                    <CascadeSelect
+                      key={k} label={ORG_LEVEL_LABEL[k]} value={to[k]}
+                      onChange={(v) => {
+                        // 상위 단계를 바꾸면 하위 선택은 비움(다른 부문의 본부가 남아 있지 않게)
+                        const lower = k === 'division' ? { dept: '', team: '' } : k === 'dept' ? { team: '' } : {}
+                        setTo((t) => ({ ...t, [k]: v, ...lower }))
+                      }}
+                      customValue={toCustom[k]} onCustomChange={(v) => setToCustom((c) => ({ ...c, [k]: v }))}
+                      options={orgOptions[k]}
+                    />
+                  ))}
+                </div>
+                {picked ? (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 10, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={applyOrg} onChange={(e) => setApplyOrg(e.target.checked)} />
+                    {picked.name}님의 소속을 <b style={{ color: P }}>{orgPath(toOrg) || '—'}</b>(으)로 바로 변경
+                  </label>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>목록에서 직원을 선택해야 소속이 자동으로 바뀌어요.</div>
+                )}
+                {picked && applyOrg && form.status === '반려' && (
+                  <div style={{ fontSize: 11, color: '#b45309', marginBottom: 10 }}>반려 상태로 등록하면 소속은 바뀌지 않아요.</div>
                 )}
               </>
             ) : (
