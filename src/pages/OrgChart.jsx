@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
@@ -59,6 +59,8 @@ export default function OrgChart() {
   const [selKey, setSelKey] = useState(null)
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState(null)
+  const [showDiagram, setShowDiagram] = useState(true)
+  const detailRef = useRef(null)
 
   const load = async () => {
     const { data, error } = await supabase.from('employees').select('id, name, rank, division, dept, team, locations')
@@ -90,6 +92,13 @@ export default function OrgChart() {
 
   const count = (level) => new Set(emps.filter((e) => e[level] !== null).map((e) => keyOf(LEVELS.slice(0, LEVELS.indexOf(level) + 1).map((l) => e[l])))).size
   const unassigned = emps.filter((e) => e.division === null).length
+
+  // 다이어그램에서 고르면 트리에서도 그 조직이 보이게 상위를 펼치고, 아래 명단 카드로 스크롤
+  const selectFromDiagram = (path) => {
+    setSelKey(keyOf(path))
+    setOpen((s) => { const n = new Set(s); for (let i = 1; i < path.length; i++) n.add(keyOf(path.slice(0, i))); return n })
+    setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+  }
 
   const toggle = (k) => setOpen((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
   const setAll = (on) => setOpen(on ? new Set(allNodes.filter((n) => n.children.length).map((n) => keyOf(n.path))) : new Set())
@@ -130,6 +139,16 @@ export default function OrgChart() {
         { v: count('team'), l: ORG_LEVEL_LABEL.team, c: G },
         { v: unassigned, l: `${ORG_LEVEL_LABEL.division} 미지정 인원`, c: Y },
       ]} />
+      {tree.length > 0 && (
+        <div style={crd}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: showDiagram ? 18 : 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>조직 다이어그램</div>
+            {showDiagram && <div style={{ fontSize: 11, color: '#94a3b8' }}>박스를 누르면 아래에 소속 직원이 보여요</div>}
+            <button style={{ ...btnGhost, padding: '6px 12px', marginLeft: 'auto' }} onClick={() => setShowDiagram((v) => !v)}>{showDiagram ? '접기' : '펼치기'}</button>
+          </div>
+          {showDiagram && <OrgDiagram tree={tree} total={emps.length} selKey={selKey} onSelect={selectFromDiagram} />}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ ...crd, flex: '1 1 380px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -142,7 +161,7 @@ export default function OrgChart() {
             visibleKeys && visibleKeys.size === 0 ? <EmptyState label="검색 결과가 없습니다" /> : tree.map((n) => renderNode(n, 0))
           )}
         </div>
-        <div style={{ ...crd, flex: '1 1 420px', minWidth: 0 }}>
+        <div ref={detailRef} style={{ ...crd, flex: '1 1 420px', minWidth: 0 }}>
           {!selected ? (
             <div style={{ color: '#94a3b8', fontSize: 12, padding: '40px 0', textAlign: 'center' }}>왼쪽에서 조직을 누르면 소속 직원이 보여요.</div>
           ) : (
@@ -163,6 +182,95 @@ export default function OrgChart() {
             setOpen((s) => { const n = new Set(s); for (let i = 1; i < newPath.length; i++) n.add(keyOf(newPath.slice(0, i))); return n })
           }}
         />
+      )}
+    </div>
+  )
+}
+
+// ═══ 다이어그램 — 회사 → 부문(가로로 나열) → 본부 카드(세로로 쌓음) → 팀 칩 ═══
+// 팀까지 가로로 펼치면 너무 넓어져서, 부문만 가로 트리로 잇고 본부·팀은 부문 밑에 카드로 쌓음
+const LINE = '#cbd5e1'
+
+function OrgDiagram({ tree, total, selKey, onSelect }) {
+  const last = tree.length - 1
+  return (
+    <div style={{ overflowX: 'auto', paddingBottom: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 'max-content' }}>
+        <div style={{ background: O, color: '#fff', borderRadius: 10, padding: '10px 22px', fontWeight: 800, fontSize: 14, textAlign: 'center' }}>
+          WONTECH <span style={{ fontWeight: 500, fontSize: 12, opacity: 0.85, marginLeft: 4 }}>{total}명</span>
+        </div>
+        <div style={{ width: 2, height: 18, background: LINE }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+          {tree.map((div, i) => (
+            <div key={keyOf(div.path)} style={{ position: 'relative', padding: '18px 8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {/* 부문들을 잇는 가로선 — 첫/마지막 칸은 가운데까지만 */}
+              {tree.length > 1 && (
+                <div style={{ position: 'absolute', top: 0, height: 2, background: LINE, left: i === 0 ? '50%' : 0, right: i === last ? '50%' : 0 }} />
+              )}
+              <div style={{ position: 'absolute', top: 0, left: 'calc(50% - 1px)', width: 2, height: 18, background: LINE }} />
+              <DiagramBox node={div} selKey={selKey} onSelect={onSelect} />
+              {div.children.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10, width: '100%', minWidth: 170, borderTop: `2px solid ${LINE}`, paddingTop: 10 }}>
+                  {div.children.map((d) => <DeptCard key={keyOf(d.path)} node={d} selKey={selKey} onSelect={onSelect} />)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DiagramBox({ node, selKey, onSelect }) {
+  const sel = selKey === keyOf(node.path)
+  const empty = node.name === null
+  return (
+    <div
+      onClick={() => onSelect(node.path)}
+      style={{
+        cursor: 'pointer', borderRadius: 10, padding: '9px 16px', textAlign: 'center', minWidth: 140, boxSizing: 'border-box',
+        background: empty ? '#f8fafc' : '#f3e8ff', color: empty ? '#94a3b8' : P,
+        border: `2px ${empty ? 'dashed' : 'solid'} ${sel ? O : empty ? '#e2e8f0' : '#e9d5ff'}`,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>{nameOf(node.level, node.name)}</div>
+      <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.8 }}>{node.members.length}명</div>
+    </div>
+  )
+}
+
+function DeptCard({ node, selKey, onSelect }) {
+  const sel = selKey === keyOf(node.path)
+  const empty = node.name === null
+  return (
+    <div
+      onClick={() => onSelect(node.path)}
+      style={{
+        cursor: 'pointer', borderRadius: 8, padding: '8px 10px', background: '#fff',
+        border: `1.5px ${empty ? 'dashed' : 'solid'} ${sel ? O : '#e2e8f0'}`, borderLeft: `4px solid ${sel ? O : empty ? '#cbd5e1' : B}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: empty ? '#94a3b8' : 'var(--text)', whiteSpace: 'nowrap' }}>{empty ? '본부 없이 바로' : node.name}</span>
+        <span style={{ fontSize: 10, color: '#94a3b8', marginLeft: 'auto' }}>{node.members.length}명</span>
+      </div>
+      {node.children.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6, maxWidth: 220 }}>
+          {node.children.map((t) => {
+            const tSel = selKey === keyOf(t.path)
+            return (
+              <span
+                key={keyOf(t.path)}
+                onClick={(ev) => { ev.stopPropagation(); onSelect(t.path) }}
+                style={{
+                  fontSize: 10.5, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap', cursor: 'pointer',
+                  background: tSel ? O : t.name === null ? '#f1f5f9' : '#dcfce7', color: tSel ? '#fff' : t.name === null ? '#94a3b8' : '#166534',
+                }}
+              >{nameOf(t.level, t.name)} {t.members.length}</span>
+            )
+          })}
+        </div>
       )}
     </div>
   )
