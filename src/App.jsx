@@ -13,6 +13,7 @@ import Criteria from './pages/Criteria'
 import CriteriaSettings from './pages/CriteriaSettings'
 import HireResign from './pages/HireResign'
 import Transfer from './pages/Transfer'
+import OrgChart from './pages/OrgChart'
 import Recruit from './pages/Recruit'
 import AccountManage from './pages/AccountManage'
 
@@ -100,6 +101,7 @@ export default function App() {
             <Route path="/resign" element={<Navigate to="/hire-resign" replace />} />
             <Route path="/onboarding" element={<Navigate to="/hire-resign" replace />} />
             <Route path="/transfer" element={<Transfer />} />
+            <Route path="/org" element={<OrgChart />} />
             <Route path="/recruit" element={<Recruit />} />
             <Route path="/accounts" element={<RequireAdmin><AccountManage /></RequireAdmin>} />
           </Route>
