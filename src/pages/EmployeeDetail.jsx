@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, ORG_HEAD_ROLES, orgPath, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
@@ -494,8 +494,11 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           <div style={{ flex: 1 }}><label style={lbl}>연차</label><input style={field} type="number" value={form.level} onChange={set('level')} /></div>
         </div>
 
-        <label style={lbl}>직책 (팀장·본부장·부문장 등, 없으면 비워두세요)</label>
-        <input style={field} value={form.role} onChange={set('role')} />
+        <label style={lbl}>직책 (부문장·본부장·팀장 등 조직장이면 지정 — 조직도에 장으로 표시돼요. 아니면 팀원)</label>
+        <input style={field} list="org-head-roles" value={form.role} onChange={set('role')} placeholder="팀원" />
+        <datalist id="org-head-roles">
+          {['팀원', ...ORG_HEAD_ROLES].map((r) => <option key={r} value={r} />)}
+        </datalist>
 
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />

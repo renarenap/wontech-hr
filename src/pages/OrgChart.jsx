@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank } from '../lib/constants'
+import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank, headLevelOf } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 // ═══ 조직도 — 부문 → 본부 → 팀 ═══
@@ -23,14 +23,16 @@ const RANK_ORDER = [...[...EXEC_RANKS].reverse(), ...[...OFFICE_RANKS].reverse()
 const rankIdx = (r) => { const i = RANK_ORDER.indexOf(baseRank(r)); return i < 0 ? 999 : i }
 const byKo = (a, b) => (a.name === null) - (b.name === null) || (a.name || '').localeCompare(b.name || '', 'ko')
 
-// 조직장 자동 인식 — 부문/본부에만 소속되고 하위(본부/팀)는 비어 있는 임원·부장·수석연구원은 그 조직의 장으로 봄.
-// (따로 저장하는 칸이 없어서 데이터로 추정) 그 조직에 장 말고 다른 사람이 있을 때만 장으로 표시 —
-// "임원"·"감사실"처럼 직속 인원만 있는 조직은 그냥 소속 직원으로 둠
+// 조직장 — 직책(role)에 부문장/본부장/팀장 등이 지정된 사람이 한 명이라도 있으면 그 지정만 사용.
+// 아직 아무도 지정 안 됐으면 자동 추정: 부문/본부에만 소속되고 하위(본부/팀)는 비어 있는 임원·부장·수석연구원을
+// 그 조직의 장으로 봄. 단 그 조직에 장 말고 다른 사람이 있을 때만 — "임원"·"감사실"처럼 직속 인원만 있으면 그냥 소속 직원
 const HEAD_RANKS = [...EXEC_RANKS, ...EXEC_CANDIDATE_RANKS]
 const headLabel = (level) => `${ORG_LEVEL_LABEL[level]}장`
+const headTitle = (h, level) => (h.role && h.role !== '팀원' ? h.role : headLabel(level))
 
 // 직원 배열 → 트리 노드 { level, name, path, members, heads, children }
 function buildTree(emps) {
+  const explicit = emps.some((e) => headLevelOf(e))
   const build = (list, depth, prefix) => {
     const level = LEVELS[depth]
     const groups = new Map()
@@ -43,7 +45,9 @@ function buildTree(emps) {
       const path = [...prefix, name]
       const lower = LEVELS.slice(depth + 1)
       let heads = []
-      if (name !== null && lower.length) {
+      if (explicit) {
+        if (name !== null) heads = members.filter((m) => headLevelOf(m) === level).sort((a, b) => rankIdx(a.rank) - rankIdx(b.rank))
+      } else if (name !== null && lower.length) {
         const cand = members.filter((m) => lower.every((l) => m[l] === null) && HEAD_RANKS.includes(baseRank(m.rank)))
         if (cand.length && cand.length < members.length) heads = cand.sort((a, b) => rankIdx(a.rank) - rankIdx(b.rank))
       }
@@ -77,7 +81,7 @@ export default function OrgChart() {
   const detailRef = useRef(null)
 
   const load = async () => {
-    const { data, error } = await supabase.from('employees').select('id, name, rank, division, dept, team, locations')
+    const { data, error } = await supabase.from('employees').select('id, name, rank, role, division, dept, team, locations')
     if (error) { setError(error); return }
     setEmps((data || []).map((e) => ({ ...e, division: norm(e.division), dept: norm(e.dept), team: norm(e.team) })))
   }
@@ -112,6 +116,16 @@ export default function OrgChart() {
     setSelKey(keyOf(path))
     setOpen((s) => { const n = new Set(s); for (let i = 1; i < path.length; i++) n.add(keyOf(path.slice(0, i))); return n })
     setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 0)
+  }
+
+  // 조직장 지정/해제 — 직책(role)을 부문장/본부장/팀장 ↔ 팀원으로 바꿈
+  const setHead = async (m, level, on) => {
+    const role = on ? headLabel(level) : '팀원'
+    const msg = on ? `${m.name}님을 ${role}으로 지정할까요?` : `${m.name}님의 ${m.role || '조직장'} 지정을 해제할까요? (직책이 '팀원'으로 바뀝니다)`
+    if (!window.confirm(msg)) return
+    const { error: err } = await supabase.from('employees').update({ role }).eq('id', m.id)
+    if (err) { window.alert(`저장하지 못했어요: ${err.message}`); return }
+    await load()
   }
 
   const toggle = (k) => setOpen((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -180,7 +194,7 @@ export default function OrgChart() {
           {!selected ? (
             <div style={{ color: '#94a3b8', fontSize: 12, padding: '40px 0', textAlign: 'center' }}>왼쪽에서 조직을 누르면 소속 직원이 보여요.</div>
           ) : (
-            <NodeDetail node={selected} isAdmin={isAdmin} onEdit={(mode) => setEditing({ mode, node: selected })} />
+            <NodeDetail node={selected} isAdmin={isAdmin} onEdit={(mode) => setEditing({ mode, node: selected })} onSetHead={setHead} />
           )}
         </div>
       </div>
@@ -255,7 +269,7 @@ function DiagramBox({ node, selKey, onSelect }) {
         <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px solid #e9d5ff', fontSize: 11, color: 'var(--text)' }}>
           {node.heads.map((h) => (
             <div key={h.id} style={{ whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: P, marginRight: 4 }}>{headLabel(node.level)}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: P, marginRight: 4 }}>{headTitle(h, node.level)}</span>
               <b>{h.name}</b> <span style={{ color: '#64748b' }}>{h.rank}</span>
             </div>
           ))}
@@ -284,7 +298,7 @@ function DeptCard({ node, selKey, onSelect }) {
         <div style={{ fontSize: 11, marginTop: 3 }}>
           {node.heads.map((h) => (
             <span key={h.id} style={{ whiteSpace: 'nowrap', marginRight: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: B, marginRight: 3 }}>{headLabel(node.level)}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: B, marginRight: 3 }}>{headTitle(h, node.level)}</span>
               <b>{h.name}</b> <span style={{ color: '#64748b' }}>{h.rank}</span>
             </span>
           ))}
@@ -302,7 +316,7 @@ function DeptCard({ node, selKey, onSelect }) {
                   fontSize: 10.5, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap', cursor: 'pointer',
                   background: tSel ? O : t.name === null ? '#f1f5f9' : '#dcfce7', color: tSel ? '#fff' : t.name === null ? '#94a3b8' : '#166534',
                 }}
-              >{nameOf(t.level, t.name)} {t.members.length}</span>
+              >{nameOf(t.level, t.name)} {t.members.length}{t.heads.length > 0 && <span style={{ opacity: 0.8 }}> · {t.heads.map((h) => h.name).join(', ')}</span>}</span>
             )
           })}
         </div>
@@ -314,13 +328,16 @@ function DeptCard({ node, selKey, onSelect }) {
 function HeadText({ heads, level }) {
   return (
     <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-      · {headLabel(level)} {heads.map((h) => `${h.name} ${h.rank || ''}`.trim()).join(', ')}
+      · {heads.map((h) => `${headTitle(h, level)} ${h.name} ${h.rank || ''}`.trim()).join(', ')}
     </span>
   )
 }
 
-function NodeDetail({ node, isAdmin, onEdit }) {
+function NodeDetail({ node, isAdmin, onEdit, onSetHead }) {
   const isHead = (m) => node.heads.includes(m)
+  const isExplicitHead = (m) => headLevelOf(m) === node.level
+  const canSetHead = isAdmin && node.name !== null
+  const autoHeads = node.heads.filter((h) => !isExplicitHead(h))
   const members = [...node.members].sort((a, b) => isHead(b) - isHead(a) || rankIdx(a.rank) - rankIdx(b.rank) || (a.name || '').localeCompare(b.name || '', 'ko'))
   const depth = LEVELS.indexOf(node.level)
   return (
@@ -338,6 +355,11 @@ function NodeDetail({ node, isAdmin, onEdit }) {
           </>
         )}
       </div>
+      {autoHeads.length > 0 && (
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>
+          {headLabel(node.level)}은 직급·소속으로 자동 추정한 거예요. 직원 정보의 직책에 부문장·본부장·팀장 등을 한 명이라도 지정하면 그때부터는 지정한 사람만 표시돼요.
+        </div>
+      )}
       <div style={{ maxHeight: 560, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -346,15 +368,23 @@ function NodeDetail({ node, isAdmin, onEdit }) {
               <th style={thS}>직급</th>
               {LEVELS.slice(depth + 1).map((l) => <th key={l} style={thS}>{ORG_LEVEL_LABEL[l]}</th>)}
               <th style={thS}>지역</th>
+              {canSetHead && <th style={thS}>{headLabel(node.level)}</th>}
             </tr>
           </thead>
           <tbody>
             {members.map((m) => (
               <tr key={m.id}>
-                <td style={{ ...tdS, fontWeight: 600 }}><Link to={`/employees/${m.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{m.name}</Link>{isHead(m) && <span style={{ marginLeft: 6 }}><Bd color={O} bg="#fff7ed">{headLabel(node.level)}</Bd></span>}</td>
+                <td style={{ ...tdS, fontWeight: 600 }}><Link to={`/employees/${m.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{m.name}</Link>{isHead(m) && <span style={{ marginLeft: 6 }}><Bd color={O} bg="#fff7ed">{headTitle(m, node.level)}</Bd></span>}</td>
                 <td style={tdS}>{m.rank || '—'}</td>
                 {LEVELS.slice(depth + 1).map((l) => <td key={l} style={{ ...tdS, color: m[l] ? 'var(--text)' : '#cbd5e1' }}>{m[l] || '—'}</td>)}
                 <td style={tdS}><LocationBadges locations={m.locations} /></td>
+                {canSetHead && (
+                  <td style={tdS}>
+                    {isExplicitHead(m)
+                      ? <button style={{ ...btnGhost, padding: '3px 9px', fontSize: 11 }} onClick={() => onSetHead(m, node.level, false)}>해제</button>
+                      : <button style={{ ...btnGhost, padding: '3px 9px', fontSize: 11 }} onClick={() => onSetHead(m, node.level, true)}>지정</button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
