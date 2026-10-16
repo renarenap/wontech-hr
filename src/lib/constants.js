@@ -115,6 +115,18 @@ export const LOCATION_STYLE = {
 // DB 컬럼명은 마이그레이션 비용 때문에 유지: division(부문, 예전 '실') / dept(본부, 예전 '팀') / team(팀, 예전 '파트')
 export const ORG_LEVEL_LABEL = { division: '부문', dept: '본부', team: '팀' }
 
+// ═══ 조직장 — employees.role(직책) 칸으로 지정 (기본값 '팀원') ═══
+// 부문장/본부장/팀장은 이름 그대로 그 단계의 장. 연구소장·실장·법인장 등 그 밖의 '~장'은
+// 그 사람 소속 중 가장 아래 단계(팀 > 본부 > 부문)의 장으로 봄
+export const ORG_HEAD_ROLES = ['부문장', '본부장', '연구소장', '실장', '법인장', '팀장']
+const HEAD_ROLE_LEVEL = { 부문장: 'division', 본부장: 'dept', 연구소장: 'dept', 팀장: 'team' }
+export function headLevelOf(e) {
+  const r = (e?.role || '').trim()
+  if (!r || r === '팀원' || !r.endsWith('장')) return null
+  const lv = HEAD_ROLE_LEVEL[r] || [...['team', 'dept', 'division']].find((l) => e[l])
+  return lv && e[lv] ? lv : null
+}
+
 // 부문 · 본부 · 팀을 화면에 보여줄 때 쓰는 공용 결합 함수 (없는 단계는 건너뜀)
 export function orgPath(e) {
   return [e?.division, e?.dept, e?.team].filter(Boolean).join(' · ')
