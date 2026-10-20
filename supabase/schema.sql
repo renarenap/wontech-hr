@@ -18,6 +18,8 @@ create table if not exists employees (
   rank text not null,
   track text not null check (track in ('사무','사무외국어필수','연구')),
   role text,
+  -- 겸직: 본 소속 외에 추가로 맡는 소속·직책 [{division, dept, team, role}, ...]
+  concurrent_posts jsonb not null default '[]'::jsonb,
   level int default 0,          -- 연차
   -- req_tenure/threshold는 더 이상 계산에 쓰이지 않음(0 저장) — rank_criteria 테이블이 단일 소스
   req_tenure int not null default 0,
@@ -232,6 +234,7 @@ create table if not exists employees_archive (
   cn_pts numeric, cn_lifetime boolean, jp_pts numeric, jp_lifetime boolean,
   cert_pts numeric, tech_pts numeric, award_pts numeric, note text, note_flag text,
   join_date date, leave_start_date date, leave_end_date date,
+  concurrent_posts jsonb,
   evaluations_snapshot jsonb,       -- 삭제 시점의 evaluations 이력 백업 (employees 삭제 시 evaluations는 cascade 삭제되므로)
   eval_comments_snapshot jsonb,     -- 삭제 시점의 eval_comments(정성평가 코멘트 이력) 백업 — 같은 이유로 cascade 삭제되므로
   note_entries_snapshot jsonb,      -- 삭제 시점의 note_entries(비고 이력) 백업 — 같은 이유로 cascade 삭제되므로
@@ -247,7 +250,7 @@ create table if not exists transfers (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references employees(id),
   name text not null,
-  type text not null,          -- 승진/부서이동/파견/직무변경
+  type text not null,          -- 승진/부서이동/파견/직무변경/휴직/직책변경/겸직/겸직해제/근무지변경
   from_value text not null,
   to_value text not null,
   rank text,

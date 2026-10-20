@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, ORG_HEAD_ROLES, orgPath, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, ORG_HEAD_ROLES, orgPath, concurrentPostsOf, postLabel, editTransfers, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
@@ -160,6 +160,12 @@ export default function EmployeeDetail() {
                 {orgPath(view)}{view.role ? ` · ${view.role}` : ''}{view.join_date ? ` · 입사 ${view.join_date}` : ''}
               </div>
             </div>
+            {concurrentPostsOf(view).length > 0 && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <Bd color={B} bg="#e0f2fe">겸직</Bd>
+                {concurrentPostsOf(view).map(postLabel).join(' / ')}
+              </div>
+            )}
             {view.leave_start_date && (
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <span>🌿 휴직 {view.leave_start_date} ~ {view.leave_end_date || '(진행중)'}</span>
@@ -402,6 +408,14 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     backfill_full_tenure: !!e.backfill_full_tenure,
     award_pts: e.award_pts ?? 0,
   })
+  // 겸직 — 각 줄마다 부문/본부/팀('' | '__custom__' | 값)과 직책, 직접 입력값은 custom에
+  const [posts, setPosts] = useState(() => concurrentPostsOf(e).map((p) => ({
+    division: p.division || '', dept: p.dept || '', team: p.team || '', role: p.role || '',
+    custom: { division: '', dept: '', team: '' },
+  })))
+  // 소속·직급·직책·겸직 등이 바뀌면 발령 탭에도 기록(기본 켜짐, 발령일은 오늘)
+  const [logTransfer, setLogTransfer] = useState(true)
+  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (ev) => setForm({ ...form, [k]: ev.target.value })
@@ -426,6 +440,27 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     return { division: narrow('division'), dept: narrow('dept', 'division'), team: narrow('team', 'dept') }
   }, [orgRows, form.division, form.dept, form.team, custom])
 
+  // 겸직 줄의 드롭다운 — 위와 같은 규칙(상위를 고르면 그 밑에 있는 것만)
+  const postVal = (p, k) => (p[k] === '__custom__' ? p.custom[k].trim() : p[k].trim())
+  const postOptions = (p, k) => {
+    const parentKey = k === 'dept' ? 'division' : k === 'team' ? 'dept' : null
+    const parent = parentKey && postVal(p, parentKey)
+    const under = parent ? orgRows.filter((r) => r[parentKey] === parent).map((r) => r[k]) : []
+    const base = under.some(Boolean) ? under : orgRows.map((r) => r[k]).concat(k === 'dept' ? DEPT_OPTIONS : [])
+    return [...new Set([...base, p[k] === '__custom__' ? '' : p[k]].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'))
+  }
+  const updatePost = (i, patch) => setPosts(posts.map((p, j) => (j === i ? { ...p, ...patch } : p)))
+  const cleanPosts = () => posts
+    .map((p) => ({ division: postVal(p, 'division') || null, dept: postVal(p, 'dept') || null, team: postVal(p, 'team') || null, role: p.role.trim() || null }))
+    .filter((p) => p.division || p.dept || p.team)
+
+  // 저장 전에 미리 보여주는 "발령 탭에 남을 변경 사항"
+  const pendingTransfers = editTransfers(e, {
+    division: orgVal('division') || null, dept: orgVal('dept') || null, team: orgVal('team') || null,
+    locations: form.locations, rank: form.rank.trim(), track: form.track, role: form.role.trim() || null,
+    concurrent_posts: cleanPosts(),
+  }, (t) => TRACK_LABEL[t] || t)
+
   const submit = async (ev) => {
     ev.preventDefault()
     setError('')
@@ -433,6 +468,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     const division = orgVal('division'), dept = orgVal('dept'), team = orgVal('team')
     if (!division && !dept && !team) { setError(`${ORG_LEVEL_LABEL.division}/${ORG_LEVEL_LABEL.dept}/${ORG_LEVEL_LABEL.team} 중 최소 하나는 있어야 해요`); return }
     if (!form.rank.trim()) { setError('직급이 비어있어요'); return }
+    if (posts.some((p) => !postVal(p, 'division') && !postVal(p, 'dept') && !postVal(p, 'team'))) {
+      setError('겸직 줄에 소속이 비어 있어요 — 고르거나 ✕로 지워주세요'); return
+    }
     setSaving(true)
     // 휴직시작·종료일이 둘 다 있으면 그걸로 휴직연차를 자동 계산(우선), 없으면 휴직연차 칸을 그대로 씀
     const autoLeaveYears = monthsBetween(form.leave_start_date, form.leave_end_date)
@@ -453,9 +491,24 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       backfill_full_tenure: form.backfill_full_tenure,
       award_pts: Number(form.award_pts) || 0,
     }
+    // 겸직은 바뀌었을 때만 보냄 — 마이그레이션 전 DB(컬럼 없음)에서도 나머지 수정은 되게
+    const nextPosts = cleanPosts()
+    if (JSON.stringify(nextPosts) !== JSON.stringify(concurrentPostsOf(e))) patch.concurrent_posts = nextPosts
     const { error: err } = await supabase.from('employees').update(patch).eq('id', e.id)
+    if (err) {
+      setSaving(false)
+      setError(/concurrent_posts/.test(err.message)
+        ? '겸직 칸이 아직 DB에 없어요 — supabase/migrations/2026-10-20_concurrent_posts.sql 을 먼저 실행해주세요.'
+        : err.message)
+      return
+    }
+    if (logTransfer && pendingTransfers.length) {
+      const { error: tErr } = await supabase.from('transfers').insert(pendingTransfers.map((t) => ({
+        ...t, employee_id: e.id, name: patch.name, rank: patch.rank, effective_date: transferDate || new Date().toISOString().slice(0, 10), status: '승인완료',
+      })))
+      if (tErr) { setSaving(false); setError(`정보는 저장됐지만 발령 기록에 실패했어요: ${tErr.message}`); return }
+    }
     setSaving(false)
-    if (err) { setError(err.message); return }
     onSaved()
   }
 
@@ -500,6 +553,41 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           {['팀원', ...ORG_HEAD_ROLES].map((r) => <option key={r} value={r} />)}
         </datalist>
 
+        <label style={lbl}>겸직 (본 소속 외에 추가로 맡는 소속·직책)</label>
+        {posts.map((p, i) => (
+          <div key={i} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px 2px', marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              {['division', 'dept', 'team'].map((k) => (
+                <div key={k} style={{ flex: 1, minWidth: 0 }}>
+                  <CascadeSelect
+                    label={ORG_LEVEL_LABEL[k]} value={p[k]} options={postOptions(p, k)}
+                    onChange={(v) => {
+                      // 상위 단계를 바꾸면 하위 선택은 비움
+                      const lower = k === 'division' ? { dept: '', team: '' } : k === 'dept' ? { team: '' } : {}
+                      updatePost(i, { [k]: v, ...lower, custom: { ...p.custom, [k]: '' } })
+                    }}
+                    customValue={p.custom[k]} onCustomChange={(v) => updatePost(i, { custom: { ...p.custom, [k]: v } })}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                style={{ ...field, flex: 1 }} list="org-head-roles" value={p.role} placeholder="겸직 직책 (예: 팀장)"
+                onChange={(ev) => updatePost(i, { role: ev.target.value })}
+              />
+              <button
+                type="button" title="이 겸직 삭제" onClick={() => setPosts(posts.filter((_, j) => j !== i))}
+                style={{ ...btnGhost, padding: '6px 10px', marginBottom: 10 }}
+              >✕</button>
+            </div>
+          </div>
+        ))}
+        <button
+          type="button" style={{ ...btnGhost, padding: '5px 12px', fontSize: 12, marginBottom: 12 }}
+          onClick={() => setPosts([...posts, { division: '', dept: '', team: '', role: '', custom: { division: '', dept: '', team: '' } }])}
+        >+ 겸직 추가</button>
+
         <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.backfill_full_tenure} onChange={setChecked('backfill_full_tenure')} />
           경력직 인정포인트 적용 (7월 2일 이후 입사자=당해년도 평가 미대상자 일 경우체크)
@@ -523,6 +611,28 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
           어학·자격가점·기술성과는 상세화면의 "어학"·"자격증"·"기술성과" 카드에서, 비고(+/−/o)와 정성평가 코멘트
           이력은 "승진리스트 검토 참고사항"에서 각각 직접 등록·수정해주세요.
         </div>
+
+        {pendingTransfers.length > 0 && (
+          <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <input type="checkbox" checked={logTransfer} onChange={(ev) => setLogTransfer(ev.target.checked)} />
+              발령 탭에도 기록
+            </label>
+            {logTransfer && (
+              <>
+                <div style={{ fontSize: 12, color: '#475569', margin: '8px 0', lineHeight: 1.7 }}>
+                  {pendingTransfers.map((t, i) => (
+                    <div key={i}><b>{t.type}</b> {t.from_value} → <span style={{ color: P, fontWeight: 600 }}>{t.to_value}</span></div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  발령일
+                  <input type="date" style={{ ...field, marginBottom: 0, width: 160 }} value={transferDate} onChange={(ev) => setTransferDate(ev.target.value)} />
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {error && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
