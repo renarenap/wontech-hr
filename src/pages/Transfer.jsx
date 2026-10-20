@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
+import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, ORG_HEAD_ROLES, orgPath, concurrentPostsOf, postLabel } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton, CascadeSelect } from '../components/ui'
 
 const TYPE_CFG = {
   부서이동: { c: B, bg: '#e0f2fe' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
-  휴직: { c: Y, bg: '#fef9c3' },
+  휴직: { c: Y, bg: '#fef9c3' }, 직책변경: { c: '#0d9488', bg: '#ccfbf1' }, 겸직: { c: '#4f46e5', bg: '#e0e7ff' },
+  겸직해제: { c: '#64748b', bg: '#f1f5f9' }, 근무지변경: { c: '#b45309', bg: '#fef3c7' },
 }
+const TYPES = Object.keys(TYPE_CFG)
 const STATUS_CFG = { 승인완료: { c: G, bg: '#dcfce7' }, 승인대기: { c: Y, bg: '#fef9c3' }, 반려: { c: R, bg: '#fee2e2' } }
 
 export default function Transfer() {
@@ -40,11 +42,7 @@ export default function Transfer() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <select style={{ ...inp, cursor: 'pointer' }} value={f} onChange={(e) => setF(e.target.value)}>
           <option value="all">전체 유형</option>
-          <option value="승진">승진</option>
-          <option value="부서이동">부서이동</option>
-          <option value="파견">파견</option>
-          <option value="직무변경">직무변경</option>
-          <option value="휴직">휴직</option>
+          {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <AddButton onClick={() => setShowAdd(true)}>+ 발령 추가</AddButton>
       </div>
@@ -111,12 +109,14 @@ function AddTransferModal({ onClose, onCreated }) {
   const [to, setTo] = useState({ division: '', dept: '', team: '' })
   const [toCustom, setToCustom] = useState({ division: '', dept: '', team: '' })
   const [applyOrg, setApplyOrg] = useState(true)
+  const [postRole, setPostRole] = useState('') // 겸직 발령일 때 겸직 직책
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   useEffect(() => {
-    supabase.from('employees').select('id, name, division, dept, team, locations, rank').order('name').then(({ data }) => setEmployees(data || []))
+    // concurrent_posts는 마이그레이션 전엔 컬럼이 없을 수 있어서 '*'로 가져옴
+    supabase.from('employees').select('*').order('name').then(({ data }) => setEmployees(data || []))
   }, [])
 
   const toVal = (k) => (to[k] === '__custom__' ? toCustom[k].trim() : to[k]) || null
@@ -148,7 +148,8 @@ function AddTransferModal({ onClose, onCreated }) {
       ...f, name: e.name, rank: f.rank || e.rank,
       from_value: f.from_value || orgPath(e),
     }))
-    // 변경 후 소속은 현재 소속으로 채워두고, 바뀌는 칸만 고르면 되게
+    // 변경 후 소속은 현재 소속으로 채워두고, 바뀌는 칸만 고르면 되게(겸직은 빈 칸에서 새로 고름)
+    if (form.type === '겸직') { setTo({ division: '', dept: '', team: '' }); setToCustom({ division: '', dept: '', team: '' }); return }
     setTo({ division: e.division?.trim() || '', dept: e.dept?.trim() || '', team: e.team?.trim() || '' })
     setToCustom({ division: '', dept: '', team: '' })
   }
@@ -158,13 +159,15 @@ function AddTransferModal({ onClose, onCreated }) {
     setError('')
     if (form.type === '휴직' && !form.leave_start) { setError('휴직시작일을 입력해주세요.'); return }
     const isMove = form.type === '부서이동'
-    if (isMove && !orgPath(toOrg)) { setError(`변경 후 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return }
+    const isPost = form.type === '겸직'
+    if ((isMove || isPost) && !orgPath(toOrg)) { setError(`변경 후 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return }
     setSaving(true)
     // 휴직 유형은 변경전/후 대신 휴직시작~종료일을 그대로 그 두 칸에 담음(스키마 변경 없이 재사용)
     // 부서이동은 "변경 후"에 부문 · 본부 · 팀을 이어 붙여 저장
     const payload = form.type === '휴직'
       ? { ...form, from_value: form.leave_start, to_value: form.leave_end || '(진행중)' }
-      : isMove ? { ...form, to_value: orgPath(toOrg) } : form
+      : isMove ? { ...form, to_value: orgPath(toOrg) }
+      : isPost ? { ...form, from_value: orgPath(picked || {}) || form.from_value || '—', to_value: postLabel({ ...toOrg, role: postRole }) } : form
     const { leave_start, leave_end, ...rest } = payload
     const { error } = await supabase.from('transfers').insert({ ...rest, employee_id: picked?.id || null })
     if (error) { setSaving(false); setError(error.message); return }
@@ -183,6 +186,20 @@ function AddTransferModal({ onClose, onCreated }) {
     if (isMove && picked?.id && applyOrg && form.status !== '반려') {
       const { error: empErr } = await supabase.from('employees').update(toOrg).eq('id', picked.id)
       if (empErr) { setSaving(false); setError(`발령은 등록됐지만 소속 변경에 실패했어요: ${empErr.message}`); return }
+    }
+
+    // 겸직 발령이면 그 직원의 겸직 목록에도 추가 — 반려 건은 제외
+    if (isPost && picked?.id && applyOrg && form.status !== '반려') {
+      const post = { ...toOrg, role: postRole.trim() || null }
+      const { error: empErr } = await supabase.from('employees')
+        .update({ concurrent_posts: [...concurrentPostsOf(picked), post] }).eq('id', picked.id)
+      if (empErr) {
+        setSaving(false)
+        setError(/concurrent_posts/.test(empErr.message)
+          ? '발령은 등록됐지만 겸직 칸이 아직 DB에 없어요 — supabase/migrations/2026-10-20_concurrent_posts.sql 을 먼저 실행해주세요.'
+          : `발령은 등록됐지만 겸직 반영에 실패했어요: ${empErr.message}`)
+        return
+      }
     }
 
     setSaving(false)
@@ -227,8 +244,17 @@ function AddTransferModal({ onClose, onCreated }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>유형</label>
-            <select style={field} value={form.type} onChange={set('type')}>
-              <option value="부서이동">부서이동</option><option value="승진">승진</option><option value="파견">파견</option><option value="직무변경">직무변경</option><option value="휴직">휴직</option>
+            <select
+              style={field} value={form.type}
+              onChange={(e) => {
+                const type = e.target.value
+                setForm({ ...form, type })
+                // 겸직 ↔ 부서이동 전환 시 "변경 후" 소속 기본값을 맞춤(겸직은 빈 칸, 부서이동은 현재 소속)
+                if (type === '겸직') setTo({ division: '', dept: '', team: '' })
+                else if (picked) setTo({ division: picked.division?.trim() || '', dept: picked.dept?.trim() || '', team: picked.team?.trim() || '' })
+              }}
+            >
+              {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
@@ -240,10 +266,18 @@ function AddTransferModal({ onClose, onCreated }) {
           </div>
         ) : (
           <>
-            <label style={lbl}>변경 전</label>
-            <input style={field} required value={form.from_value} onChange={set('from_value')} placeholder="예: 글로벌영업팀 · 지역영업파트" />
-            <label style={lbl}>변경 후</label>
-            {form.type === '부서이동' ? (
+            {form.type === '겸직' ? (
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                본 소속({picked ? orgPath(picked) || '—' : '직원 선택'})은 그대로 두고, 아래 소속을 겸직으로 추가해요.
+              </div>
+            ) : (
+              <>
+                <label style={lbl}>변경 전</label>
+                <input style={field} required value={form.from_value} onChange={set('from_value')} placeholder="예: 글로벌영업팀 · 지역영업파트" />
+              </>
+            )}
+            <label style={lbl}>{form.type === '겸직' ? '겸직 소속' : '변경 후'}</label>
+            {form.type === '부서이동' || form.type === '겸직' ? (
               <>
                 <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px 2px', marginBottom: 10 }}>
                   {['division', 'dept', 'team'].map((k) => (
@@ -258,14 +292,23 @@ function AddTransferModal({ onClose, onCreated }) {
                       options={orgOptions[k]}
                     />
                   ))}
+                  {form.type === '겸직' && (
+                    <>
+                      <label style={lbl}>겸직 직책</label>
+                      <input style={field} list="transfer-head-roles" value={postRole} onChange={(e) => setPostRole(e.target.value)} placeholder="예: 팀장" />
+                      <datalist id="transfer-head-roles">{ORG_HEAD_ROLES.map((r) => <option key={r} value={r} />)}</datalist>
+                    </>
+                  )}
                 </div>
                 {picked ? (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 10, cursor: 'pointer' }}>
                     <input type="checkbox" checked={applyOrg} onChange={(e) => setApplyOrg(e.target.checked)} />
-                    {picked.name}님의 소속을 <b style={{ color: P }}>{orgPath(toOrg) || '—'}</b>(으)로 바로 변경
+                    {form.type === '겸직'
+                      ? <>{picked.name}님의 겸직에 <b style={{ color: P }}>{postLabel({ ...toOrg, role: postRole })}</b> 바로 추가</>
+                      : <>{picked.name}님의 소속을 <b style={{ color: P }}>{orgPath(toOrg) || '—'}</b>(으)로 바로 변경</>}
                   </label>
                 ) : (
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>목록에서 직원을 선택해야 소속이 자동으로 바뀌어요.</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10 }}>목록에서 직원을 선택해야 {form.type === '겸직' ? '겸직이' : '소속이'} 자동으로 {form.type === '겸직' ? '추가돼요' : '바뀌어요'}.</div>
                 )}
                 {picked && applyOrg && form.status === '반려' && (
                   <div style={{ fontSize: 11, color: '#b45309', marginBottom: 10 }}>반려 상태로 등록하면 소속은 바뀌지 않아요.</div>

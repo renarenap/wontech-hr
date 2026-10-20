@@ -132,6 +132,36 @@ export function orgPath(e) {
   return [e?.division, e?.dept, e?.team].filter(Boolean).join(' · ')
 }
 
+// ═══ 겸직 — employees.concurrent_posts: 본 소속 외에 추가로 맡는 [{division, dept, team, role}] ═══
+// (마이그레이션 2026-10-20_concurrent_posts.sql 실행 전이면 컬럼이 없어서 undefined — 빈 배열로 취급)
+export const concurrentPostsOf = (e) => (Array.isArray(e?.concurrent_posts) ? e.concurrent_posts : [])
+export function postLabel(p) {
+  const path = orgPath(p)
+  const role = p?.role?.trim()
+  return role && role !== '팀원' ? `${path || '—'} (${role})` : path || '—'
+}
+
+// 직원 정보 수정 전/후를 비교해서 발령 탭(transfers)에 남길 항목을 만듦 — 소속·위치·직급·직군·직책·겸직만
+// (이름·입사일·연차·휴직·포인트 같은 건 발령 사항이 아니라서 제외)
+export function editTransfers(before, after, trackLabel = (v) => v) {
+  const out = []
+  const add = (type, from, to) => out.push({ type, from_value: from || '—', to_value: to || '—' })
+  const t = (v) => (typeof v === 'string' ? v.trim() : v) || ''
+  const org = (e) => orgPath({ division: t(e.division), dept: t(e.dept), team: t(e.team) })
+  if (org(before) !== org(after)) add('부서이동', org(before), org(after))
+  const locs = (e) => (e.locations || []).join(', ')
+  if (locs(before) !== locs(after)) add('근무지변경', locs(before), locs(after))
+  if (t(before.rank) !== t(after.rank)) add('승진', t(before.rank), t(after.rank))
+  if (t(before.track) !== t(after.track)) add('직무변경', trackLabel(before.track), trackLabel(after.track))
+  const role = (r) => t(r) || '팀원'
+  if (role(before.role) !== role(after.role)) add('직책변경', role(before.role), role(after.role))
+  const prev = concurrentPostsOf(before).map(postLabel)
+  const next = concurrentPostsOf(after).map(postLabel)
+  next.filter((l) => !prev.includes(l)).forEach((l) => add('겸직', org(after), l)) // 본 소속 → 겸직 소속
+  prev.filter((l) => !next.includes(l)).forEach((l) => add('겸직해제', l, ''))
+  return out
+}
+
 // 직원 파생 필드 계산(deriveEmployee)은 rank_criteria 파라미터 테이블을 참조해야 해서
 // src/lib/promotion.js 로 옮겼습니다 (하드코딩된 직급 기준표 대신 DB 설정값 사용).
 

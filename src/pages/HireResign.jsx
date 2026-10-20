@@ -70,6 +70,8 @@ async function resignEmployee(picked, lastDay) {
     has_pending_backfill: picked.has_pending_backfill, pending_points: picked.pending_points,
     pending_resolved: picked.pending_resolved, pending_release_points: picked.pending_release_points,
     join_date: picked.join_date, leave_start_date: picked.leave_start_date, leave_end_date: picked.leave_end_date,
+    // 겸직은 있을 때만 넣음 — 마이그레이션 전 DB(컬럼 없음)에서도 퇴사 처리가 막히지 않게
+    ...(picked.concurrent_posts?.length ? { concurrent_posts: picked.concurrent_posts } : {}),
     evaluations_snapshot: evals || [], eval_comments_snapshot: comments || [], note_entries_snapshot: notes || [],
     cert_entries_snapshot: certs || [], tech_entries_snapshot: techs || [], pending_point_log_snapshot: pendingLog || [],
     transfer_ids: (transfers || []).map((t) => t.id), resign_date: lastDay,
@@ -101,6 +103,7 @@ async function restoreEmployee(archived) {
     has_pending_backfill: !!archived.has_pending_backfill, pending_points: archived.pending_points,
     pending_resolved: !!archived.pending_resolved, pending_release_points: archived.pending_release_points || 0,
     join_date: archived.join_date, leave_start_date: archived.leave_start_date, leave_end_date: archived.leave_end_date,
+    ...(archived.concurrent_posts?.length ? { concurrent_posts: archived.concurrent_posts } : {}),
   }
   if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
 
