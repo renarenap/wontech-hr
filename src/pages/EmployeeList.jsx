@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, editTransfers, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { fetchLevelReferenceYear, fetchLatestBumpBatch, applyLevelBump, undoLevelBump } from '../lib/levelBump'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
@@ -713,6 +713,9 @@ function ExportImportModal({ employees, onClose, onApplied }) {
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
   const [backedUp, setBackedUp] = useState(false)
+  // 소속·직급·직책 등이 바뀐 사람은 발령 탭에도 기록(기본 켜짐, 발령일은 오늘) — 직원 상세 수정과 동일
+  const [logTransfer, setLogTransfer] = useState(true)
+  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   const download = (isBackup) => {
     const stamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', 'h') + 'm'
@@ -760,6 +763,8 @@ function ExportImportModal({ employees, onClose, onApplied }) {
           return
         }
         const patch = buildPatch(raw)
+        // CSV의 "임원"은 표시용이라 사무로 정규화되는데, 기존 임원의 실제 직군(연구 등)은 그대로 둠 — 안 그러면 가짜 직무변경 발령이 생김
+        if (pickByPrefix(raw, '직군(').trim() === '임원' && EXEC_RANKS.includes(baseRank(emp.rank))) patch.track = emp.track
         const changed = {}
         CSV_EDITABLE_KEYS.forEach((k) => {
           const newVal = patch[k]
@@ -771,7 +776,8 @@ function ExportImportModal({ employees, onClose, onApplied }) {
           if (String(newNorm) !== String(oldNorm)) changed[k] = { from: oldNorm, to: newNorm }
         })
         if (Object.keys(changed).length > 0) {
-          out.push({ key: id, kind: 'update', id, name: emp.name, changed, patch, errors: validatePatch(patch) })
+          const transfers = editTransfers(emp, { ...emp, ...patch }, (t) => TRACK_LABEL[t] || t)
+          out.push({ key: id, kind: 'update', id, name: emp.name, changed, patch, transfers, errors: validatePatch(patch) })
         }
       })
       setRows(out)
@@ -790,6 +796,12 @@ function ExportImportModal({ employees, onClose, onApplied }) {
         if (r.kind === 'update') {
           const { error: err } = await supabase.from('employees').update(r.patch).eq('id', r.id)
           if (err) throw new Error(err.message)
+          if (logTransfer && r.transfers.length) {
+            const { error: tErr } = await supabase.from('transfers').insert(r.transfers.map((t) => ({
+              ...t, employee_id: r.id, name: r.patch.name || r.name, rank: r.patch.rank, effective_date: transferDate || new Date().toISOString().slice(0, 10), status: '승인완료',
+            })))
+            if (tErr) throw new Error(`정보는 저장됐지만 발령 기록에 실패했어요: ${tErr.message}`)
+          }
         } else if (r.kind === 'insert') {
           const { error: err } = await supabase.from('employees').insert({
             ...r.patch, role: '팀원', req_tenure: 0, threshold: 0, base_pts: 0,
@@ -808,6 +820,7 @@ function ExportImportModal({ employees, onClose, onApplied }) {
 
   const actionable = (rows || []).filter((r) => r.kind !== 'error')
   const blocked = (rows || []).filter((r) => r.errors?.length > 0)
+  const transferCount = actionable.filter((r) => !r.errors?.length).reduce((n, r) => n + (r.transfers?.length || 0), 0)
 
   return (
     <Modal title="전체 데이터 다운로드 / 업로드" onClose={onClose} width={760}>
@@ -852,10 +865,27 @@ function ExportImportModal({ employees, onClose, onApplied }) {
                   ) : (
                     <span style={{ color: '#64748b' }}>
                       {Object.entries(r.changed).map(([k, v]) => `${k}: ${v.from} → ${v.to}`).join(' · ')}
+                      {logTransfer && r.transfers.length > 0 && (
+                        <span style={{ color: P, fontWeight: 600 }}> · 발령: {r.transfers.map((t) => t.type).join(', ')}</span>
+                      )}
                     </span>
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {transferCount > 0 && (
+            <div style={{ background: '#f8fafc', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', marginTop: 12, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={logTransfer} onChange={(ev) => setLogTransfer(ev.target.checked)} />
+                발령 탭에도 기록 ({transferCount}건 — 소속·근무지·직급·직군·직책 변경)
+              </label>
+              {logTransfer && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  발령일
+                  <input type="date" style={{ ...inp, width: 160 }} value={transferDate} onChange={(ev) => setTransferDate(ev.target.value)} />
+                </div>
+              )}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
