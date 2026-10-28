@@ -5,7 +5,7 @@ import { P, G, O, Y, B, ORG_LEVEL_LABEL, TRACKS, orgPath, suggestTrackForDept } 
 import { fetchRankCriteria } from '../lib/promotion'
 import { calcCareer, judgeEntry, entryMonths, newCareerEntry, thisMonth, ranksForTrack, careerLabel, EDU_LEVELS, eduStatuses, SIMILARITY, CAREER_TYPES } from '../lib/careerRank'
 import { QuickAddHireModal } from './HireResign'
-import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
+import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton, todayStr } from '../components/ui'
 
 const STATUS_CFG = {
   최종협의: { c: '#7c3aed', bg: '#f3e8ff' }, 면접진행: { c: O, bg: '#fff7ed' }, 서류심사: { c: B, bg: '#e0f2fe' }, 공고중: { c: G, bg: '#dcfce7' }, 마감: { c: '#64748b', bg: '#f1f5f9' },
@@ -431,7 +431,10 @@ function careerFromCandidate(c, defaultTrack) {
 // position 없이 열리면(계산기에서 등록) 포지션을 고르는 칸이 나오고, initialCareer로 계산기 값을 그대로 가져옴
 function CandidateModal({ position: fixedPosition, positions = [], defaultPositionId, initialCareer, candidate, criteriaMap, onClose, onSaved }) {
   const c = candidate || {}
-  const [positionId, setPositionId] = useState(fixedPosition?.id || defaultPositionId || '')
+  // '__custom__'이면 포지션명을 직접 입력 — 저장할 때 채용 포지션도 새로 만들어짐(포지션이 하나도 없으면 기본값)
+  const [positionId, setPositionId] = useState(fixedPosition?.id || defaultPositionId || (positions.length ? '' : '__custom__'))
+  const [customPosition, setCustomPosition] = useState('')
+  const isCustomPos = !fixedPosition && positionId === '__custom__'
   const position = fixedPosition || positions.find((p) => p.id === positionId) || null
   const [form, setForm] = useState({
     name: c.name || initialCareer?.name || '', stage: c.stage || STAGES[0], result: c.result || '검토중',
@@ -450,8 +453,16 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
   const submit = async (e) => {
     e.preventDefault()
     setError('')
-    if (!position) { setError('채용 포지션을 선택해주세요. (포지션이 없으면 먼저 "+ 포지션 추가")'); return }
+    if (!position && !(isCustomPos && customPosition.trim())) { setError('채용 포지션을 선택하거나 직접 입력해주세요.'); return }
     setSaving(true)
+    let targetId = position?.id
+    if (isCustomPos) {
+      const { data: np, error: ep } = await supabase.from('recruit_positions')
+        .insert({ position: customPosition.trim(), open_date: todayStr(), status: '공고중', hire_type: '경력', locations: [] })
+        .select().single()
+      if (ep) { setSaving(false); setError(ep.message); return }
+      targetId = np.id
+    }
     const entries = career.entries
       .filter((x) => entryMonths(x) > 0 || (x.company || '').trim())
       .map((x) => {
@@ -467,7 +478,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
     }
     const { error } = candidate
       ? await supabase.from('recruit_candidates').update(row).eq('id', candidate.id)
-      : await supabase.from('recruit_candidates').insert({ ...row, position_id: position.id })
+      : await supabase.from('recruit_candidates').insert({ ...row, position_id: targetId })
     setSaving(false)
     if (error) {
       setError(/column/i.test(error.message)
@@ -475,7 +486,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
         : error.message)
       return
     }
-    onSaved(position.id)
+    onSaved(targetId)
   }
 
   return (
@@ -487,7 +498,14 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
             <select style={field} required value={positionId} onChange={(e) => setPositionId(e.target.value)}>
               <option value="" disabled>선택하세요</option>
               {positions.map((p) => <option key={p.id} value={p.id}>{p.position}{orgPath(p) ? ` (${orgPath(p)})` : ''} · {p.status}</option>)}
+              <option value="__custom__">+ 포지션 직접 입력</option>
             </select>
+            {isCustomPos && (
+              <>
+                <input style={field} required placeholder="포지션명 (예: 해외영업 경력직)" value={customPosition} onChange={(e) => setCustomPosition(e.target.value)} />
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>저장하면 채용 포지션 목록에도 '공고중'으로 추가돼요. 소속은 비어 있어도 되고, 입사 등록할 때 고르면 돼요.</div>
+              </>
+            )}
           </>
         )}
         <label style={lbl}>이름 (예: 김○○)</label>
