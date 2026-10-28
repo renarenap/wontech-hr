@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { P, G, O, Y, B, ORG_LEVEL_LABEL, TRACKS, orgPath, suggestTrackForDept } from '../lib/constants'
 import { fetchRankCriteria } from '../lib/promotion'
@@ -22,7 +23,10 @@ export default function Recruit() {
   const [showAddCand, setShowAddCand] = useState(false)
   const [editCand, setEditCand] = useState(null)
   const [hireCand, setHireCand] = useState(null)
+  const [calcCand, setCalcCand] = useState(null) // 계산기 값으로 지원자 등록
+  const [calcHire, setCalcHire] = useState(null) // 계산기 값으로 바로 입사 등록
   const [criteriaMap, setCriteriaMap] = useState(null)
+  const navigate = useNavigate()
 
   useEffect(() => { fetchRankCriteria().then(setCriteriaMap).catch(setError) }, [])
 
@@ -78,7 +82,7 @@ export default function Recruit() {
         { v: positions.filter((p) => p.status === '최종협의').length, l: '최종 협의', c: '#7c3aed' },
         { v: totalCands, l: '총 지원자', c: B },
       ]} />
-      <CareerCalculator criteriaMap={criteriaMap} />
+      <CareerCalculator criteriaMap={criteriaMap} onRegister={setCalcCand} onHire={(v) => setCalcHire(candidateFromCalc(v, criteriaMap))} />
       <div style={{ display: 'grid', gridTemplateColumns: s ? '1fr 1fr' : '1fr', gap: 16 }}>
         <div style={crd}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>채용 포지션</div>
@@ -162,8 +166,22 @@ export default function Recruit() {
             const { error } = await supabase.from('recruit_candidates').update({ result: '입사확정', stage: '입사', hired_employee_id: emp?.id || null }).eq('id', hireCand.id)
             if (error) window.alert(`입사 등록은 됐지만 지원자 상태를 못 바꿨어요: ${error.message}`)
             setHireCand(null)
-            load()
+            navigate('/hire-resign')
           }}
+        />
+      )}
+      {calcCand && (
+        <CandidateModal
+          positions={positions} initialCareer={calcCand} defaultPositionId={sel} criteriaMap={criteriaMap}
+          onClose={() => setCalcCand(null)}
+          onSaved={(positionId) => { setCalcCand(null); setSel(positionId); load() }}
+        />
+      )}
+      {calcHire && (
+        <QuickAddHireModal
+          initial={hireInitial(calcHire, null)}
+          onClose={() => setCalcHire(null)}
+          onCreated={() => { setCalcHire(null); navigate('/hire-resign') }}
         />
       )}
     </div>
@@ -338,7 +356,7 @@ function CareerResult({ est }) {
         인정 연차 <b>{est.total}년</b> → <b style={{ color: P, fontSize: 14 }}>{est.rank} {est.level}연차</b>
       </div>
       <div style={{ color: '#94a3b8', fontSize: 11 }}>
-        {est.steps.map((st) => `${st.rank} ${st.years}년`).join(' → ')} (기준표 체류연한 누적 · 남는 개월은 버림)
+        {est.steps.map((st) => `${st.rank} ${st.years}년`).join(' → ')} (기준표 체류연한 누적 · 남는 개월은 1년으로 올림)
       </div>
     </div>
   )
@@ -347,7 +365,7 @@ function CareerResult({ est }) {
 const emptyCareer = (track = '사무') => ({ track, edu_level: '', edu_status: '졸업', entries: [newCareerEntry()] })
 
 // 채용 탭 상단 — 저장 없이 바로 돌려보는 계산기
-function CareerCalculator({ criteriaMap }) {
+function CareerCalculator({ criteriaMap, onRegister, onHire }) {
   const [v, setV] = useState(emptyCareer())
   const est = calcCareer(v, criteriaMap)
   return (
@@ -359,10 +377,25 @@ function CareerCalculator({ criteriaMap }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start' }}>
         <div><CareerEditor v={v} set={setV} /></div>
-        <CareerResult est={est} />
+        <div>
+          <CareerResult est={est} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" style={btnGhost} onClick={() => onRegister(v)}>이 내용으로 지원자 등록</button>
+            <button type="button" style={{ ...btnPrimary, background: G }} onClick={() => onHire(v)}>바로 입사 등록</button>
+          </div>
+        </div>
       </div>
     </div>
   )
+}
+
+// 계산기 값 → 입사 등록 화면에 넘길 지원자 모양 (저장 안 된 임시 값)
+function candidateFromCalc(v, criteriaMap) {
+  const est = calcCareer(v, criteriaMap)
+  return {
+    name: '', track: v.track, edu_level: v.edu_level || null, edu_status: v.edu_status, edu_years: est.eduYears,
+    career_months: Math.round(est.recMonths), est_rank: est.rank, est_level: est.level,
+  }
 }
 
 // 저장된 지원자 → 편집용 경력 값 (career_entries가 없던 1차 버전 데이터는 총 경력 1건으로 변환)
@@ -378,13 +411,16 @@ function careerFromCandidate(c, defaultTrack) {
   }
 }
 
-function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) {
+// position 없이 열리면(계산기에서 등록) 포지션을 고르는 칸이 나오고, initialCareer로 계산기 값을 그대로 가져옴
+function CandidateModal({ position: fixedPosition, positions = [], defaultPositionId, initialCareer, candidate, criteriaMap, onClose, onSaved }) {
   const c = candidate || {}
+  const [positionId, setPositionId] = useState(fixedPosition?.id || defaultPositionId || '')
+  const position = fixedPosition || positions.find((p) => p.id === positionId) || null
   const [form, setForm] = useState({
     name: c.name || '', stage: c.stage || '서류심사', result: c.result || '검토중',
     school: c.school || '', major: c.major || '', memo: c.memo || '',
   })
-  const [career, setCareer] = useState(() => careerFromCandidate(c, suggestTrackForDept(position.dept, false, position.team)))
+  const [career, setCareer] = useState(() => initialCareer || careerFromCandidate(c, suggestTrackForDept(position?.dept, false, position?.team)))
   const est = calcCareer(career, criteriaMap)
   // 직위·연차는 계산값을 따라가다가, 직접 고치면(override) 그 값을 유지
   const [override, setOverride] = useState(null)
@@ -397,6 +433,7 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
+    if (!position) { setError('채용 포지션을 선택해주세요. (포지션이 없으면 먼저 "+ 포지션 추가")'); return }
     setSaving(true)
     const entries = career.entries
       .filter((x) => entryMonths(x) > 0 || (x.company || '').trim())
@@ -420,12 +457,21 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
         : error.message)
       return
     }
-    onSaved()
+    onSaved(position.id)
   }
 
   return (
-    <Modal title={`${candidate ? '지원자 수정' : '지원자 추가'} — ${position.position}`} onClose={onClose} width={560}>
+    <Modal title={`${candidate ? '지원자 수정' : '지원자 추가'}${fixedPosition ? ` — ${fixedPosition.position}` : ''}`} onClose={onClose} width={560}>
       <form onSubmit={submit}>
+        {!fixedPosition && (
+          <>
+            <label style={lbl}>채용 포지션</label>
+            <select style={field} required value={positionId} onChange={(e) => setPositionId(e.target.value)}>
+              <option value="" disabled>선택하세요</option>
+              {positions.map((p) => <option key={p.id} value={p.id}>{p.position}{orgPath(p) ? ` (${orgPath(p)})` : ''} · {p.status}</option>)}
+            </select>
+          </>
+        )}
         <label style={lbl}>이름 (예: 김○○)</label>
         <input style={field} required value={form.name} onChange={set('name')} />
         <div style={{ display: 'flex', gap: 8 }}>
@@ -496,7 +542,7 @@ function hireInitial(c, position) {
     c.edu_level ? `${eduLabel(c)}${c.edu_years ? ` (${sign(c.edu_years)}년)` : ''}` : null,
   ].filter(Boolean).join(' · ') + (c.est_rank ? ` → ${c.est_rank} ${c.est_level ?? 0}연차` : '')
   return {
-    name: c.name, division: position.division, dept: position.dept, team: position.team, locations: position.locations || [],
-    rank: c.est_rank || '', track: c.track || suggestTrackForDept(position.dept, false, position.team), level: c.est_level ?? 0, note,
+    name: c.name, division: position?.division, dept: position?.dept, team: position?.team, locations: position?.locations || [],
+    rank: c.est_rank || '', track: c.track || suggestTrackForDept(position?.dept, false, position?.team), level: c.est_level ?? 0, note,
   }
 }
