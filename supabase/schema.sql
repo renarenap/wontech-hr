@@ -281,12 +281,14 @@ create table if not exists recruit_candidates (
   name text not null,          -- 익명 처리 표기 가능 (김○○ 등)
   stage text not null,         -- 서류심사/1차면접/2차면접/처우협의 등
   result text not null,        -- 검토중/통과/진행중/합격대기/탈락/입사확정
-  edu_level text,              -- 최종학력: 고졸/전문학사/학사/석사/박사
+  edu_level text,              -- 최종학력: 박사/석사/4년제 대졸/전문대졸/고졸
+  edu_status text,             -- 졸업/수료
   school text,
   major text,
-  edu_years int not null default 0,      -- 학력 인정 연차
-  career_months int not null default 0,  -- 총 경력(개월)
-  career_rate int not null default 100,  -- 경력 인정비율(%)
+  edu_years int not null default 0,      -- 학력 가감 연차(박사 졸업 +4 … 고졸 -2)
+  career_entries jsonb not null default '[]'::jsonb,  -- 회사별 경력 [{company, years, months, type, similarity, exception, note}]
+  career_months int not null default 0,  -- 인정 경력(개월, 유사도 비율 반영)
+  career_rate int not null default 100,  -- (1차 버전 호환용 — 지금은 경력 건별 유사도로 계산)
   track text,
   est_rank text,               -- 경력 연차로 계산한 예상 직급
   est_level int,               -- 예상 연차(직급 내)

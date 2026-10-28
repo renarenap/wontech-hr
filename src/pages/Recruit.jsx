@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, Y, B, ORG_LEVEL_LABEL, TRACKS, orgPath, suggestTrackForDept } from '../lib/constants'
 import { fetchRankCriteria } from '../lib/promotion'
-import { estimateRank, recognizedYears, ranksForTrack, careerLabel } from '../lib/careerRank'
+import { calcCareer, judgeEntry, entryMonths, newCareerEntry, ranksForTrack, careerLabel, EDU_LEVELS, eduStatuses, SIMILARITY, CAREER_TYPES } from '../lib/careerRank'
 import { QuickAddHireModal } from './HireResign'
 import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
@@ -128,7 +128,7 @@ export default function Recruit() {
               s.recruit_candidates.map((c) => {
                 const cx = RESULT_CFG[c.result] || RESULT_CFG['검토중']
                 const hired = c.result === '입사확정'
-                const profile = [c.edu_level && [c.edu_level, c.school, c.major].filter(Boolean).join(' '), c.career_months > 0 ? `경력 ${careerLabel(c.career_months)}` : null].filter(Boolean).join(' · ')
+                const profile = [eduLabel(c), c.career_months > 0 ? `인정 경력 ${careerLabel(c.career_months)}` : null].filter(Boolean).join(' · ')
                 return (
                   <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 4px', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ minWidth: 0 }}>
@@ -223,48 +223,97 @@ function AddPositionModal({ onClose, onCreated }) {
   )
 }
 
-// ═══ 경력 → 예상 직급 계산 (rank_criteria 체류연한 누적 기준, src/lib/careerRank.js) ═══
-const EDU_LEVELS = ['고졸', '전문학사', '학사', '석사', '박사']
+// ═══ 학력·경력 → 예상 직급 계산 (학력 인정 기준·경력 인정 기준 + rank_criteria 체류연한 누적, src/lib/careerRank.js) ═══
+const miniField = { ...field, padding: '7px 8px', fontSize: 12, marginBottom: 0 }
 
-// 총 인정 연차 = 경력(개월 × 인정비율, 만 년수) + 학력 인정 연차
-function calcCareer(v, criteriaMap) {
-  const months = (Number(v.years) || 0) * 12 + (Number(v.months) || 0)
-  const total = recognizedYears(months, v.rate) + Math.max(0, Number(v.edu_years) || 0)
-  return { months, total, ...estimateRank(total, v.track, criteriaMap) }
-}
+// 예전에 저장된 학력 값(학사/전문학사) → 학력 인정 기준표 이름으로
+const LEGACY_EDU = { 학사: '4년제 대졸', 전문학사: '전문대졸' }
 
-function CareerFields({ v, set }) {
-  const num = (k) => (e) => set({ ...v, [k]: e.target.value })
+// v: { track, edu_level, edu_status, entries[] }
+function CareerEditor({ v, set }) {
+  const setEntry = (i, patch) => set({ ...v, entries: v.entries.map((e, j) => (j === i ? { ...e, ...patch } : e)) })
+  const statuses = eduStatuses(v.edu_level)
   return (
     <>
-      <label style={lbl}>직군</label>
-      <select style={field} value={v.track} onChange={num('track')}>
-        {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-      </select>
       <div style={{ display: 'flex', gap: 8 }}>
-        <div style={{ flex: 1 }}><label style={lbl}>경력 (년)</label><input style={field} type="number" min="0" value={v.years} onChange={num('years')} /></div>
-        <div style={{ flex: 1 }}><label style={lbl}>+ 개월</label><input style={field} type="number" min="0" max="11" value={v.months} onChange={num('months')} /></div>
-        <div style={{ flex: 1 }}><label style={lbl}>인정비율 (%)</label><input style={field} type="number" min="0" max="100" value={v.rate} onChange={num('rate')} /></div>
-        <div style={{ flex: 1 }}><label style={lbl}>학력 인정 (년)</label><input style={field} type="number" min="0" value={v.edu_years} onChange={num('edu_years')} /></div>
+        <div style={{ flex: 1.2 }}>
+          <label style={lbl}>직군</label>
+          <select style={field} value={v.track} onChange={(e) => set({ ...v, track: e.target.value })}>
+            {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={lbl}>최종학력</label>
+          <select style={field} value={v.edu_level} onChange={(e) => set({ ...v, edu_level: e.target.value, edu_status: '졸업' })}>
+            <option value="">(미입력)</option>
+            {EDU_LEVELS.map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 0.8 }}>
+          <label style={lbl}>졸업/수료</label>
+          <select style={field} value={statuses.includes(v.edu_status) ? v.edu_status : '졸업'} disabled={statuses.length < 2} onChange={(e) => set({ ...v, edu_status: e.target.value })}>
+            {(statuses.length ? statuses : ['졸업']).map((x) => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </div>
       </div>
+
+      <label style={lbl}>경력 (회사별로 입력 — 직무 유사도 상 100% · 중 80% · 하 50%)</label>
+      {v.entries.map((e, i) => {
+        const j = judgeEntry(e)
+        return (
+          <div key={i} style={{ border: '1px solid #f1f5f9', borderRadius: 8, padding: 8, marginBottom: 6 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input style={{ ...miniField, flex: 2 }} placeholder="회사명" value={e.company} onChange={(ev) => setEntry(i, { company: ev.target.value })} />
+              <input style={{ ...miniField, width: 52 }} type="number" min="0" value={e.years} onChange={(ev) => setEntry(i, { years: ev.target.value })} /><span style={{ fontSize: 11 }}>년</span>
+              <input style={{ ...miniField, width: 52 }} type="number" min="0" max="11" value={e.months} onChange={(ev) => setEntry(i, { months: ev.target.value })} /><span style={{ fontSize: 11 }}>개월</span>
+              <button type="button" title="삭제" onClick={() => set({ ...v, entries: v.entries.filter((_, k) => k !== i) })} style={{ border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+              <select style={{ ...miniField, flex: 1.3 }} value={e.type} onChange={(ev) => setEntry(i, { type: ev.target.value })}>
+                {CAREER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select style={{ ...miniField, flex: 1 }} value={e.similarity} onChange={(ev) => setEntry(i, { similarity: ev.target.value })}>
+                {SIMILARITY.map((x) => <option key={x.value} value={x.value}>유사도 {x.value} ({x.rate}%)</option>)}
+              </select>
+              <div style={{ flex: 1.4, fontSize: 11, textAlign: 'right', fontWeight: 600, color: j.ok ? G : '#dc2626' }}>
+                {j.ok ? `인정 ${careerLabel(j.months)}` : `불인정 (${j.reason})`}
+              </div>
+            </div>
+            {j.reason && (
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!e.exception} onChange={(ev) => setEntry(i, { exception: ev.target.checked })} /> 예외 인정
+                </label>
+                <input style={{ ...miniField, flex: 1 }} placeholder="비고 (예외 인정 사유)" value={e.note} onChange={(ev) => setEntry(i, { note: ev.target.value })} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+      <button type="button" style={{ ...btnGhost, padding: '5px 12px', fontSize: 11, marginBottom: 10 }} onClick={() => set({ ...v, entries: [...v.entries, newCareerEntry()] })}>+ 경력 추가</button>
     </>
   )
 }
 
 function CareerResult({ est }) {
+  const sign = (n) => (n > 0 ? `+${n}` : `${n}`)
   return (
-    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontSize: 12 }}>
+    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px', marginBottom: 10, fontSize: 12, lineHeight: 1.7 }}>
+      <div style={{ color: '#475569' }}>
+        인정 경력 {careerLabel(est.recMonths)} → <b>{est.careerYears}년</b>
+        {est.eduYears !== 0 && <> · 학력 <b>{sign(est.eduYears)}년</b></>}
+      </div>
       <div>
         인정 연차 <b>{est.total}년</b> → <b style={{ color: P, fontSize: 14 }}>{est.rank} {est.level}연차</b>
       </div>
-      <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 3 }}>
+      <div style={{ color: '#94a3b8', fontSize: 11 }}>
         {est.steps.map((st) => `${st.rank} ${st.years}년`).join(' → ')} (기준표 체류연한 누적 · 남는 개월은 버림)
       </div>
     </div>
   )
 }
 
-const emptyCareer = (track = '사무') => ({ track, years: 0, months: 0, rate: 100, edu_years: 0 })
+const emptyCareer = (track = '사무') => ({ track, edu_level: '', edu_status: '졸업', entries: [newCareerEntry()] })
 
 // 채용 탭 상단 — 저장 없이 바로 돌려보는 계산기
 function CareerCalculator({ criteriaMap }) {
@@ -272,32 +321,42 @@ function CareerCalculator({ criteriaMap }) {
   const est = calcCareer(v, criteriaMap)
   return (
     <div style={{ ...crd, marginBottom: 16 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🧮 경력 → 직급 계산기</div>
-      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
-        경력 연차를 넣으면 승진기준표 체류연한(사원 {criteriaMap['사원']?.req_tenure ?? '-'}년 · 대리 {criteriaMap['대리']?.req_tenure ?? '-'}년 …)을 쌓아서 어느 직급 몇 연차인지 계산해요.
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>🧮 학력·경력 → 직급 계산기</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12, lineHeight: 1.6 }}>
+        학력 가감(박사 졸업 +4·수료 +3 / 석사 +2·+1 / 4년제 0 / 전문대 -1 / 고졸 -2) + 경력(유사도 상·중·하 100·80·50%, 프리랜서·개인사업자·인턴·6개월 미만은 불인정)을
+        승진기준표 체류연한(사원 {criteriaMap['사원']?.req_tenure ?? '-'}년 · 대리 {criteriaMap['대리']?.req_tenure ?? '-'}년 …)에 쌓아서 직급·연차를 계산해요.
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1.2fr)', gap: 16, alignItems: 'end' }}>
-        <div><CareerFields v={v} set={setV} /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start' }}>
+        <div><CareerEditor v={v} set={setV} /></div>
         <CareerResult est={est} />
       </div>
     </div>
   )
 }
 
+// 저장된 지원자 → 편집용 경력 값 (career_entries가 없던 1차 버전 데이터는 총 경력 1건으로 변환)
+function careerFromCandidate(c, defaultTrack) {
+  let entries = Array.isArray(c.career_entries) && c.career_entries.length ? c.career_entries : null
+  if (!entries && c.career_months > 0) {
+    const sim = SIMILARITY.find((x) => x.rate === c.career_rate)?.value || '상'
+    entries = [{ ...newCareerEntry(), years: Math.floor(c.career_months / 12), months: c.career_months % 12, similarity: sim }]
+  }
+  return {
+    track: c.track || defaultTrack, edu_level: LEGACY_EDU[c.edu_level] || c.edu_level || '', edu_status: c.edu_status || '졸업',
+    entries: entries || [newCareerEntry()],
+  }
+}
+
 function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) {
   const c = candidate || {}
-  const defaultTrack = c.track || suggestTrackForDept(position.dept, false, position.team)
   const [form, setForm] = useState({
     name: c.name || '', stage: c.stage || '서류심사', result: c.result || '검토중',
-    edu_level: c.edu_level || '', school: c.school || '', major: c.major || '', memo: c.memo || '',
+    school: c.school || '', major: c.major || '', memo: c.memo || '',
   })
-  const [career, setCareer] = useState({
-    track: defaultTrack, years: Math.floor((c.career_months || 0) / 12), months: (c.career_months || 0) % 12,
-    rate: c.career_rate ?? 100, edu_years: c.edu_years || 0,
-  })
+  const [career, setCareer] = useState(() => careerFromCandidate(c, suggestTrackForDept(position.dept, false, position.team)))
   const est = calcCareer(career, criteriaMap)
   // 직위·연차는 계산값을 따라가다가, 직접 고치면(override) 그 값을 유지
-  const [override, setOverride] = useState(c.est_rank ? { rank: c.est_rank, level: c.est_level ?? 0 } : null)
+  const [override, setOverride] = useState(null)
   const rank = override?.rank ?? est.rank
   const level = override?.level ?? est.level
   const [error, setError] = useState('')
@@ -308,9 +367,13 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
     e.preventDefault()
     setError('')
     setSaving(true)
+    const entries = career.entries
+      .filter((x) => entryMonths(x) > 0 || x.company.trim())
+      .map((x) => ({ ...x, company: x.company.trim(), years: Number(x.years) || 0, months: Number(x.months) || 0, note: x.note.trim() }))
     const row = {
-      ...form, edu_level: form.edu_level || null, school: form.school.trim() || null, major: form.major.trim() || null, memo: form.memo.trim() || null,
-      track: career.track, career_months: est.months, career_rate: Number(career.rate) || 0, edu_years: Math.max(0, Number(career.edu_years) || 0),
+      ...form, school: form.school.trim() || null, major: form.major.trim() || null, memo: form.memo.trim() || null,
+      track: career.track, edu_level: career.edu_level || null, edu_status: career.edu_level ? (eduStatuses(career.edu_level).includes(career.edu_status) ? career.edu_status : '졸업') : null,
+      edu_years: est.eduYears, career_entries: entries, career_months: Math.round(est.recMonths), career_rate: 100,
       est_rank: rank, est_level: Number(level) || 0,
     }
     const { error } = candidate
@@ -319,7 +382,7 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
     setSaving(false)
     if (error) {
       setError(/column/i.test(error.message)
-        ? `DB에 학력·경력 칸이 아직 없어요 — supabase/migrations/2026-10-28_recruit_candidate_profile.sql을 먼저 실행해주세요. (${error.message})`
+        ? `DB에 학력·경력 칸이 아직 없어요 — supabase/migrations/2026-10-28b_recruit_career_entries.sql을 먼저 실행해주세요. (${error.message})`
         : error.message)
       return
     }
@@ -327,7 +390,7 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
   }
 
   return (
-    <Modal title={`${candidate ? '지원자 수정' : '지원자 추가'} — ${position.position}`} onClose={onClose} width={460}>
+    <Modal title={`${candidate ? '지원자 수정' : '지원자 추가'} — ${position.position}`} onClose={onClose} width={560}>
       <form onSubmit={submit}>
         <label style={lbl}>이름 (예: 김○○)</label>
         <input style={field} required value={form.name} onChange={set('name')} />
@@ -344,21 +407,12 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
           </div>
         </div>
 
-        <div style={{ fontSize: 12, fontWeight: 700, margin: '6px 0 8px' }}>🎓 학력</div>
+        <div style={{ fontSize: 12, fontWeight: 700, margin: '6px 0 8px' }}>🎓 학력 · 💼 경력</div>
+        <CareerEditor v={career} set={setCareer} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <label style={lbl}>최종학력</label>
-            <select style={field} value={form.edu_level} onChange={set('edu_level')}>
-              <option value="">(미입력)</option>
-              {EDU_LEVELS.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
-          </div>
-          <div style={{ flex: 1.3 }}><label style={lbl}>학교</label><input style={field} value={form.school} onChange={set('school')} /></div>
-          <div style={{ flex: 1.3 }}><label style={lbl}>전공</label><input style={field} value={form.major} onChange={set('major')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>학교</label><input style={field} value={form.school} onChange={set('school')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>전공</label><input style={field} value={form.major} onChange={set('major')} /></div>
         </div>
-
-        <div style={{ fontSize: 12, fontWeight: 700, margin: '6px 0 8px' }}>💼 경력 → 예상 직급</div>
-        <CareerFields v={career} set={setCareer} />
         <CareerResult est={est} />
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1.4 }}>
@@ -372,6 +426,12 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
             <input style={field} type="number" step="1" value={level} onChange={(e) => setOverride({ rank, level: e.target.value })} />
           </div>
         </div>
+        {candidate?.est_rank && !override && (candidate.est_rank !== est.rank || (candidate.est_level ?? 0) !== est.level) && (
+          <div style={{ fontSize: 11, color: '#b45309', marginTop: -6, marginBottom: 10 }}>
+            이전에 저장된 값은 {candidate.est_rank} {candidate.est_level ?? 0}연차예요 — 저장하면 위 계산값으로 바뀝니다.{' '}
+            <button type="button" onClick={() => setOverride({ rank: candidate.est_rank, level: candidate.est_level ?? 0 })} style={{ border: 'none', background: 'none', color: B, fontSize: 11, cursor: 'pointer', padding: 0 }}>이전 값 유지</button>
+          </div>
+        )}
 
         <label style={lbl}>메모</label>
         <input style={field} value={form.memo} onChange={set('memo')} placeholder="예: 이전 직장 직급, 처우 조건 등" />
@@ -386,13 +446,20 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
   )
 }
 
+// 지원자 목록·입사 등록 화면에 보여줄 학력 한 줄 (예: "석사 수료 ○○대 전자공학")
+function eduLabel(c) {
+  const lv = LEGACY_EDU[c.edu_level] || c.edu_level
+  if (!lv) return ''
+  const st = eduStatuses(lv).length > 1 && c.edu_status ? ` ${c.edu_status}` : ''
+  return [`${lv}${st}`, c.school, c.major].filter(Boolean).join(' ')
+}
+
 // 합격자 → 입사자 등록 화면에 미리 채울 값 (포지션의 소속·위치 + 지원자의 예상 직급·연차)
 function hireInitial(c, position) {
-  const edu = [c.edu_level, c.school, c.major].filter(Boolean).join(' ')
+  const sign = (n) => (n > 0 ? `+${n}` : `${n}`)
   const note = [
-    c.career_months > 0 ? `경력 ${careerLabel(c.career_months)}${c.career_rate !== 100 ? ` (인정 ${c.career_rate}%)` : ''}` : '신입',
-    c.edu_years > 0 ? `학력 인정 ${c.edu_years}년` : null,
-    edu || null,
+    c.career_months > 0 ? `인정 경력 ${careerLabel(c.career_months)}` : '경력 없음',
+    c.edu_level ? `${eduLabel(c)}${c.edu_years ? ` (${sign(c.edu_years)}년)` : ''}` : null,
   ].filter(Boolean).join(' · ') + (c.est_rank ? ` → ${c.est_rank} ${c.est_level ?? 0}연차` : '')
   return {
     name: c.name, division: position.division, dept: position.dept, team: position.team, locations: position.locations || [],
