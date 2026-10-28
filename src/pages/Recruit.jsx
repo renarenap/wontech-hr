@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { P, G, O, Y, B, ORG_LEVEL_LABEL, TRACKS, orgPath, suggestTrackForDept } from '../lib/constants'
 import { fetchRankCriteria } from '../lib/promotion'
-import { calcCareer, judgeEntry, entryMonths, newCareerEntry, ranksForTrack, careerLabel, EDU_LEVELS, eduStatuses, SIMILARITY, CAREER_TYPES } from '../lib/careerRank'
+import { calcCareer, judgeEntry, entryMonths, newCareerEntry, thisMonth, ranksForTrack, careerLabel, EDU_LEVELS, eduStatuses, SIMILARITY, CAREER_TYPES } from '../lib/careerRank'
 import { QuickAddHireModal } from './HireResign'
 import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
@@ -229,6 +229,15 @@ const miniField = { ...field, padding: '7px 8px', fontSize: 12, marginBottom: 0 
 // 예전에 저장된 학력 값(학사/전문학사) → 학력 인정 기준표 이름으로
 const LEGACY_EDU = { 학사: '4년제 대졸', 전문학사: '전문대졸' }
 
+// 기간↔날짜 입력 전환 — 날짜로 계산된 기간은 "기간 입력"으로 넘어갈 때 그 값을 그대로 가져감
+function modeSwitch(e, mode) {
+  if (mode === 'period' && e.mode === 'date') {
+    const m = entryMonths(e)
+    return { mode, years: Math.floor(m / 12), months: m % 12 }
+  }
+  return { mode }
+}
+
 // v: { track, edu_level, edu_status, entries[] }
 function CareerEditor({ v, set }) {
   const setEntry = (i, patch) => set({ ...v, entries: v.entries.map((e, j) => (j === i ? { ...e, ...patch } : e)) })
@@ -263,10 +272,32 @@ function CareerEditor({ v, set }) {
         return (
           <div key={i} style={{ border: '1px solid #f1f5f9', borderRadius: 8, padding: 8, marginBottom: 6 }}>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input style={{ ...miniField, flex: 2 }} placeholder="회사명" value={e.company} onChange={(ev) => setEntry(i, { company: ev.target.value })} />
-              <input style={{ ...miniField, width: 52 }} type="number" min="0" value={e.years} onChange={(ev) => setEntry(i, { years: ev.target.value })} /><span style={{ fontSize: 11 }}>년</span>
-              <input style={{ ...miniField, width: 52 }} type="number" min="0" max="11" value={e.months} onChange={(ev) => setEntry(i, { months: ev.target.value })} /><span style={{ fontSize: 11 }}>개월</span>
+              <input style={{ ...miniField, flex: 1 }} placeholder="회사명" value={e.company} onChange={(ev) => setEntry(i, { company: ev.target.value })} />
+              <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                {[['period', '기간 입력'], ['date', '날짜 입력']].map(([m, t]) => (
+                  <button key={m} type="button" onClick={() => setEntry(i, modeSwitch(e, m))}
+                    style={{ border: 'none', padding: '6px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600, background: (e.mode || 'period') === m ? P : '#fff', color: (e.mode || 'period') === m ? '#fff' : '#64748b' }}>{t}</button>
+                ))}
+              </div>
               <button type="button" title="삭제" onClick={() => set({ ...v, entries: v.entries.filter((_, k) => k !== i) })} style={{ border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 14 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+              {e.mode === 'date' ? (
+                <>
+                  <input style={{ ...miniField, width: 130 }} type="month" placeholder="YYYY-MM" value={e.start || ''} onChange={(ev) => setEntry(i, { start: ev.target.value })} />
+                  <span style={{ fontSize: 11 }}>~</span>
+                  <input style={{ ...miniField, width: 130 }} type="month" placeholder="YYYY-MM" disabled={e.ongoing} value={e.ongoing ? thisMonth() : e.end || ''} onChange={(ev) => setEntry(i, { end: ev.target.value })} />
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!e.ongoing} onChange={(ev) => setEntry(i, { ongoing: ev.target.checked })} /> 재직중
+                  </label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginLeft: 'auto' }}>= {careerLabel(j.raw)}</span>
+                </>
+              ) : (
+                <>
+                  <input style={{ ...miniField, width: 60 }} type="number" min="0" value={e.years} onChange={(ev) => setEntry(i, { years: ev.target.value })} /><span style={{ fontSize: 11 }}>년</span>
+                  <input style={{ ...miniField, width: 60 }} type="number" min="0" max="11" value={e.months} onChange={(ev) => setEntry(i, { months: ev.target.value })} /><span style={{ fontSize: 11 }}>개월</span>
+                </>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
               <select style={{ ...miniField, flex: 1.3 }} value={e.type} onChange={(ev) => setEntry(i, { type: ev.target.value })}>
@@ -368,8 +399,11 @@ function CandidateModal({ position, candidate, criteriaMap, onClose, onSaved }) 
     setError('')
     setSaving(true)
     const entries = career.entries
-      .filter((x) => entryMonths(x) > 0 || x.company.trim())
-      .map((x) => ({ ...x, company: x.company.trim(), years: Number(x.years) || 0, months: Number(x.months) || 0, note: x.note.trim() }))
+      .filter((x) => entryMonths(x) > 0 || (x.company || '').trim())
+      .map((x) => {
+        const m = entryMonths(x)
+        return { ...x, company: (x.company || '').trim(), years: Math.floor(m / 12), months: m % 12, note: (x.note || '').trim() }
+      })
     const row = {
       ...form, school: form.school.trim() || null, major: form.major.trim() || null, memo: form.memo.trim() || null,
       track: career.track, edu_level: career.edu_level || null, edu_status: career.edu_level ? (eduStatuses(career.edu_level).includes(career.edu_status) ? career.edu_status : '졸업') : null,
