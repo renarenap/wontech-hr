@@ -289,6 +289,8 @@ create table if not exists recruit_candidates (
   career_entries jsonb not null default '[]'::jsonb,  -- 회사별 경력 [{company, years, months, type, similarity, exception, note}]
   career_months int not null default 0,  -- 인정 경력(개월, 유사도 비율 반영)
   career_rate int not null default 100,  -- (1차 버전 호환용 — 지금은 경력 건별 유사도로 계산)
+  manual_adj int not null default 0,     -- 담당자 수동 조정 연차(±년)
+  manual_note text,                      -- 수동 조정 사유
   track text,
   est_rank text,               -- 경력 연차로 계산한 예상 직급
   est_level int,               -- 예상 연차(직급 내)

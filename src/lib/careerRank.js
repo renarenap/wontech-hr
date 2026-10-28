@@ -64,17 +64,20 @@ export function judgeEntry(e) {
 }
 
 // 학력+경력 전체 계산 — 인정 경력은 개월 단위로 합친 뒤 년수로 환산, 남는 개월이 있으면 1년으로 올림(3년 3개월 → 4년)
-export function calcCareer({ track, edu_level, edu_status, entries = [] }, criteriaMap) {
+// manual_adj: 담당자가 상황에 따라 직접 더하거나 빼는 연차(±년)
+export function calcCareer({ track, edu_level, edu_status, entries = [], manual_adj = 0 }, criteriaMap) {
   const judged = entries.map((e) => ({ ...e, judge: judgeEntry(e) }))
   const recMonths = Math.round(judged.reduce((s, e) => s + e.judge.months, 0) * 10) / 10
   const careerYears = Math.ceil(recMonths / 12)
   const eduYears = edu_level ? eduAdjust(edu_level, edu_status) : 0
-  const total = careerYears + eduYears
-  return { judged, recMonths, careerYears, eduYears, total, ...estimateRank(total, track, criteriaMap) }
+  const manualYears = Math.trunc(Number(manual_adj) || 0)
+  const total = careerYears + eduYears + manualYears
+  return { judged, recMonths, careerYears, eduYears, manualYears, total, ...estimateRank(total, track, criteriaMap) }
 }
 
 // 반환: { rank, level, steps } — steps는 화면에 "사원 4년 → 대리 2년" 식으로 풀어 보여줄 구간들.
 // 인정 연차가 마이너스면(예: 고졸 신입 -2) 첫 직급의 마이너스 연차 — 입사자 등록의 "연차 마이너스" 입력과 같은 의미.
+// 체류연한을 딱 채운 연차는 아직 그 직급으로 봄(사원 체류연한 4년이면 인정 4년 = 사원 4연차, 5년부터 대리 1연차).
 // 체류연한이 0인(기준 없는) 직급에 닿으면 거기서 멈추고 남은 연차를 전부 그 직급 연차로 봄(트랙 최고 직급).
 export function estimateRank(years, track, criteriaMap) {
   const ranks = ranksForTrack(track)
@@ -85,7 +88,7 @@ export function estimateRank(years, track, criteriaMap) {
     const rank = ranks[i]
     const req = criteriaMap?.[rank]?.req_tenure || 0
     const last = i === ranks.length - 1 || req <= 0
-    if (last || left < req) {
+    if (last || left <= req) {
       steps.push({ rank, years: left, current: true })
       return { rank, level: left, steps }
     }

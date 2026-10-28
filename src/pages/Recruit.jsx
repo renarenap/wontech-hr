@@ -340,6 +340,15 @@ function CareerEditor({ v, set }) {
         )
       })}
       <button type="button" style={{ ...btnGhost, padding: '5px 12px', fontSize: 11, marginBottom: 10 }} onClick={() => set({ ...v, entries: [...v.entries, newCareerEntry()] })}>+ 경력 추가</button>
+
+      <label style={lbl}>수동 조정 (상황에 따라 연차를 직접 더하거나 빼기)</label>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 }}>
+        <button type="button" style={{ ...btnGhost, padding: '6px 12px' }} onClick={() => set({ ...v, manual_adj: (Number(v.manual_adj) || 0) - 1 })}>−</button>
+        <input style={{ ...miniField, width: 60, textAlign: 'center' }} type="number" step="1" value={v.manual_adj ?? 0} onChange={(e) => set({ ...v, manual_adj: e.target.value })} />
+        <button type="button" style={{ ...btnGhost, padding: '6px 12px' }} onClick={() => set({ ...v, manual_adj: (Number(v.manual_adj) || 0) + 1 })}>+</button>
+        <span style={{ fontSize: 11 }}>년</span>
+        <input style={{ ...miniField, flex: 1 }} placeholder="조정 사유 (예: 관련 자격 보유, 처우 협의 결과)" value={v.manual_note || ''} onChange={(e) => set({ ...v, manual_note: e.target.value })} />
+      </div>
     </>
   )
 }
@@ -351,6 +360,7 @@ function CareerResult({ est }) {
       <div style={{ color: '#475569' }}>
         인정 경력 {careerLabel(est.recMonths)} → <b>{est.careerYears}년</b>
         {est.eduYears !== 0 && <> · 학력 <b>{sign(est.eduYears)}년</b></>}
+        {est.manualYears !== 0 && <> · 수동 조정 <b style={{ color: O }}>{sign(est.manualYears)}년</b></>}
       </div>
       <div>
         인정 연차 <b>{est.total}년</b> → <b style={{ color: P, fontSize: 14 }}>{est.rank} {est.level}연차</b>
@@ -399,6 +409,7 @@ function candidateFromCalc(v, criteriaMap) {
   return {
     name: (v.name || '').trim(), track: v.track, edu_level: v.edu_level || null, edu_status: v.edu_status, edu_years: est.eduYears,
     career_months: Math.round(est.recMonths), est_rank: est.rank, est_level: est.level,
+    manual_adj: est.manualYears, manual_note: (v.manual_note || '').trim() || null,
   }
 }
 
@@ -411,7 +422,7 @@ function careerFromCandidate(c, defaultTrack) {
   }
   return {
     track: c.track || defaultTrack, edu_level: LEGACY_EDU[c.edu_level] || c.edu_level || '', edu_status: c.edu_status || '졸업',
-    entries: entries || [newCareerEntry()],
+    entries: entries || [newCareerEntry()], manual_adj: c.manual_adj || 0, manual_note: c.manual_note || '',
   }
 }
 
@@ -449,6 +460,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
       ...form, school: form.school.trim() || null, major: form.major.trim() || null, memo: form.memo.trim() || null,
       track: career.track, edu_level: career.edu_level || null, edu_status: career.edu_level ? (eduStatuses(career.edu_level).includes(career.edu_status) ? career.edu_status : '졸업') : null,
       edu_years: est.eduYears, career_entries: entries, career_months: Math.round(est.recMonths), career_rate: 100,
+      manual_adj: est.manualYears, manual_note: (career.manual_note || '').trim() || null,
       est_rank: rank, est_level: Number(level) || 0,
     }
     const { error } = candidate
@@ -457,7 +469,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
     setSaving(false)
     if (error) {
       setError(/column/i.test(error.message)
-        ? `DB에 학력·경력 칸이 아직 없어요 — supabase/migrations/2026-10-28b_recruit_career_entries.sql을 먼저 실행해주세요. (${error.message})`
+        ? `DB에 학력·경력 칸이 아직 없어요 — supabase/migrations/2026-10-28b_recruit_career_entries.sql·2026-10-28c_recruit_manual_adj.sql을 먼저 실행해주세요. (${error.message})`
         : error.message)
       return
     }
@@ -544,6 +556,7 @@ function hireInitial(c, position) {
   const note = [
     c.career_months > 0 ? `인정 경력 ${careerLabel(c.career_months)}` : '경력 없음',
     c.edu_level ? `${eduLabel(c)}${c.edu_years ? ` (${sign(c.edu_years)}년)` : ''}` : null,
+    c.manual_adj ? `수동 조정 ${sign(c.manual_adj)}년${c.manual_note ? `(${c.manual_note})` : ''}` : null,
   ].filter(Boolean).join(' · ') + (c.est_rank ? ` → ${c.est_rank} ${c.est_level ?? 0}연차` : '')
   return {
     name: c.name, division: position?.division, dept: position?.dept, team: position?.team, locations: position?.locations || [],
