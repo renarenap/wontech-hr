@@ -30,8 +30,27 @@ export const similarityRate = (s) => SIMILARITY.find((x) => x.value === s)?.rate
 export const CAREER_TYPES = ['정규·계약직', '프리랜서·개인사업자', '인턴']
 export const MIN_CAREER_MONTHS = 6
 
-export const newCareerEntry = () => ({ company: '', years: 0, months: 0, type: '정규·계약직', similarity: '상', exception: false, note: '' })
-export const entryMonths = (e) => Math.max(0, (Number(e.years) || 0) * 12 + (Number(e.months) || 0))
+// mode: 'period'(몇 년 몇 개월 직접 입력) / 'date'(입사·퇴사 년월 입력 → 기간 자동 계산)
+export const newCareerEntry = () => ({
+  company: '', mode: 'period', years: 0, months: 0, start: '', end: '', ongoing: false,
+  type: '정규·계약직', similarity: '상', exception: false, note: '',
+})
+
+export const thisMonth = () => new Date().toISOString().slice(0, 7)
+
+// 'YYYY-MM' ~ 'YYYY-MM' 개월 수 — 입사월·퇴사월 둘 다 포함(2020-03 ~ 2022-02 = 2년 0개월)
+export function monthsBetween(start, end) {
+  const p = (v) => { const [y, m] = (v || '').split('-').map(Number); return y && m ? y * 12 + m : null }
+  const a = p(start)
+  const b = p(end)
+  if (a == null || b == null || b < a) return 0
+  return b - a + 1
+}
+
+// 날짜로 입력한 경력은 "재직중"이면 이번 달까지로 매번 다시 계산
+export const entryMonths = (e) => (e.mode === 'date'
+  ? monthsBetween(e.start, e.ongoing ? thisMonth() : e.end)
+  : Math.max(0, (Number(e.years) || 0) * 12 + (Number(e.months) || 0)))
 
 // 경력 한 건의 인정 여부 — { ok, reason, rate, months(인정 개월) }
 export function judgeEntry(e) {
