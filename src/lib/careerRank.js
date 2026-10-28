@@ -63,11 +63,11 @@ export function judgeEntry(e) {
   return { ok, reason, rate, raw, months: ok ? (raw * rate) / 100 : 0 }
 }
 
-// 학력+경력 전체 계산 — 인정 경력은 개월 단위로 합친 뒤 만 년수로 끊음(남는 개월은 버림, employees.level이 정수라서)
+// 학력+경력 전체 계산 — 인정 경력은 개월 단위로 합친 뒤 년수로 환산, 남는 개월이 있으면 1년으로 올림(3년 3개월 → 4년)
 export function calcCareer({ track, edu_level, edu_status, entries = [] }, criteriaMap) {
   const judged = entries.map((e) => ({ ...e, judge: judgeEntry(e) }))
   const recMonths = Math.round(judged.reduce((s, e) => s + e.judge.months, 0) * 10) / 10
-  const careerYears = Math.floor(recMonths / 12)
+  const careerYears = Math.ceil(recMonths / 12)
   const eduYears = edu_level ? eduAdjust(edu_level, edu_status) : 0
   const total = careerYears + eduYears
   return { judged, recMonths, careerYears, eduYears, total, ...estimateRank(total, track, criteriaMap) }
