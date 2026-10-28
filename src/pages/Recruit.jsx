@@ -376,7 +376,11 @@ function CareerCalculator({ criteriaMap, onRegister, onHire }) {
         승진기준표 체류연한(사원 {criteriaMap['사원']?.req_tenure ?? '-'}년 · 대리 {criteriaMap['대리']?.req_tenure ?? '-'}년 …)에 쌓아서 직급·연차를 계산해요.
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, alignItems: 'start' }}>
-        <div><CareerEditor v={v} set={setV} /></div>
+        <div>
+          <label style={lbl}>이름</label>
+          <input style={field} placeholder="지원자 이름 (등록할 때 그대로 들어가요)" value={v.name || ''} onChange={(e) => setV({ ...v, name: e.target.value })} />
+          <CareerEditor v={v} set={setV} />
+        </div>
         <div>
           <CareerResult est={est} />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -393,7 +397,7 @@ function CareerCalculator({ criteriaMap, onRegister, onHire }) {
 function candidateFromCalc(v, criteriaMap) {
   const est = calcCareer(v, criteriaMap)
   return {
-    name: '', track: v.track, edu_level: v.edu_level || null, edu_status: v.edu_status, edu_years: est.eduYears,
+    name: (v.name || '').trim(), track: v.track, edu_level: v.edu_level || null, edu_status: v.edu_status, edu_years: est.eduYears,
     career_months: Math.round(est.recMonths), est_rank: est.rank, est_level: est.level,
   }
 }
@@ -417,7 +421,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
   const [positionId, setPositionId] = useState(fixedPosition?.id || defaultPositionId || '')
   const position = fixedPosition || positions.find((p) => p.id === positionId) || null
   const [form, setForm] = useState({
-    name: c.name || '', stage: c.stage || '서류심사', result: c.result || '검토중',
+    name: c.name || initialCareer?.name || '', stage: c.stage || '서류심사', result: c.result || '검토중',
     school: c.school || '', major: c.major || '', memo: c.memo || '',
   })
   const [career, setCareer] = useState(() => initialCareer || careerFromCandidate(c, suggestTrackForDept(position?.dept, false, position?.team)))
