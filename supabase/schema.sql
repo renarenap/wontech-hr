@@ -280,7 +280,18 @@ create table if not exists recruit_candidates (
   position_id uuid references recruit_positions(id) on delete cascade,
   name text not null,          -- 익명 처리 표기 가능 (김○○ 등)
   stage text not null,         -- 서류심사/1차면접/2차면접/처우협의 등
-  result text not null,        -- 검토중/통과/진행중/합격대기/탈락
+  result text not null,        -- 검토중/통과/진행중/합격대기/탈락/입사확정
+  edu_level text,              -- 최종학력: 고졸/전문학사/학사/석사/박사
+  school text,
+  major text,
+  edu_years int not null default 0,      -- 학력 인정 연차
+  career_months int not null default 0,  -- 총 경력(개월)
+  career_rate int not null default 100,  -- 경력 인정비율(%)
+  track text,
+  est_rank text,               -- 경력 연차로 계산한 예상 직급
+  est_level int,               -- 예상 연차(직급 내)
+  memo text,
+  hired_employee_id uuid references employees(id) on delete set null,
   created_at timestamptz default now()
 );
 
