@@ -222,16 +222,17 @@ export default function HireResign() {
 // 부문→본부→팀처럼 상위 선택에 따라 하위 옵션이 좁혀지는 select. value가 목록에 없으면(직접입력) 텍스트 입력칸이 따로 뜸.
 // required=false면 맨 위 빈 옵션("없음")을 고를 수 있어 안 채워도 되고, required=true면 그 옵션이 비활성이라 뭔가 골라야 함.
 // ═══ 입사자 등록 ═══
-function QuickAddHireModal({ onClose, onCreated }) {
+// initial: 채용 탭에서 합격자를 넘겨받을 때 미리 채워둘 값({ name, division, dept, team, locations, rank, track, level, note })
+export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
   const [depts, setDepts] = useState([])
   const [divisions, setDivisions] = useState([])
   const [teams, setTeams] = useState([])
   const [deptsByDivision, setDeptsByDivision] = useState({})
   const [teamsByDept, setTeamsByDept] = useState({})
   const [teamsByDivision, setTeamsByDivision] = useState({})
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initial.name || '')
   const [roster, setRoster] = useState([])
-  const [locations, setLocations] = useState([])
+  const [locations, setLocations] = useState(initial.locations || [])
   const [division, setDivision] = useState('')
   const [customDivision, setCustomDivision] = useState('')
   const [dept, setDept] = useState('')
@@ -239,10 +240,10 @@ function QuickAddHireModal({ onClose, onCreated }) {
   const [team, setTeam] = useState('')
   const [customTeam, setCustomTeam] = useState('')
   const [joinDate, setJoinDate] = useState('')
-  const [rank, setRank] = useState('')
-  const [track, setTrack] = useState('')
-  const [trackTouched, setTrackTouched] = useState(false)
-  const [level, setLevel] = useState(0)
+  const [rank, setRank] = useState(initial.rank || '')
+  const [track, setTrack] = useState(initial.track || '')
+  const [trackTouched, setTrackTouched] = useState(!!initial.track)
+  const [level, setLevel] = useState(initial.level ?? 0)
   const [backfillFullTenure, setBackfillFullTenure] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -279,6 +280,22 @@ function QuickAddHireModal({ onClose, onCreated }) {
         ;(byDivisionTeam[r.division] ??= new Set()).add(r.team)
       })
       setTeamsByDivision(Object.fromEntries(Object.entries(byDivisionTeam).map(([k, v]) => [k, [...v].sort((a, b) => a.localeCompare(b, 'ko'))])))
+
+      // 채용 탭에서 넘어온 소속 — 기존 목록에 있으면 그 값을 고르고, 없으면 "직접 입력"으로 채움
+      const pick = (v, opts, setSel, setCustom) => {
+        if (!v) return
+        if (opts.includes(v)) setSel(v)
+        else { setSel('__custom__'); setCustom(v) }
+      }
+      // (부문/본부를 고르면 하위 목록이 좁혀지므로 화면에 실제로 뜰 목록 기준으로 판단)
+      const allDepts = [...new Set([...DEPT_OPTIONS, ...liveDept])]
+      const allTeams = [...new Set(rows.map((r) => r.team).filter(Boolean))]
+      const deptOpts = byDivision[initial.division]?.size ? [...byDivision[initial.division]] : allDepts
+      const teamOpts = byDept[initial.dept]?.size ? [...byDept[initial.dept]]
+        : (!initial.dept && byDivisionTeam[initial.division]?.size) ? [...byDivisionTeam[initial.division]] : allTeams
+      pick(initial.division, [...new Set(rows.map((r) => r.division).filter(Boolean))], setDivision, setCustomDivision)
+      pick(initial.dept, deptOpts, setDept, setCustomDept)
+      pick(initial.team, teamOpts, setTeam, setCustomTeam)
     })
   }, [])
 
@@ -331,8 +348,8 @@ function QuickAddHireModal({ onClose, onCreated }) {
       if (!window.confirm(`같은 이름의 직원이 이미 있어요:\n${list}\n\n동명이인(다른 사람)이 맞으면 [확인]을 눌러 등록해주세요.`)) { setSaving(false); return }
     }
     try {
-      await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
-      onCreated()
+      const emp = await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      onCreated(emp)
     } catch (err) {
       setError(err.message)
     }
@@ -407,6 +424,11 @@ function QuickAddHireModal({ onClose, onCreated }) {
           </div>
         )}
 
+        {initial.note && (
+          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', marginBottom: 10, fontSize: 11, color: '#475569', lineHeight: 1.6 }}>
+            📋 채용 탭 계산: {initial.note} — 직위·연차가 맞는지 확인만 해주세요.
+          </div>
+        )}
         <label style={lbl}>인정 연차 (경력직인 경우 이전 경력 연차 포함)</label>
         <input style={field} type="number" step="1" value={level} onChange={(e) => setLevel(e.target.value)} />
         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: -6, marginBottom: 10 }}>
