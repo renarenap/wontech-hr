@@ -10,6 +10,8 @@ import { Bd, KpiRow, LocationBadges, LocationPicker, crd, thS, tdS, inp, Loading
 const STATUS_CFG = {
   최종협의: { c: '#7c3aed', bg: '#f3e8ff' }, 면접진행: { c: O, bg: '#fff7ed' }, 서류심사: { c: B, bg: '#e0f2fe' }, 공고중: { c: G, bg: '#dcfce7' }, 마감: { c: '#64748b', bg: '#f1f5f9' },
 }
+// 지원자 단계 (선택식)
+const STAGES = ['처우 협의', '채용기안 상신', '채용 대기']
 const RESULT_CFG = {
   입사확정: { c: '#fff', bg: G }, 합격대기: { c: G, bg: '#dcfce7' }, 통과: { c: B, bg: '#e0f2fe' }, 진행중: { c: O, bg: '#fff7ed' }, 검토중: { c: Y, bg: '#fef9c3' }, 탈락: { c: '#94a3b8', bg: '#f1f5f9' },
 }
@@ -432,7 +434,7 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
   const [positionId, setPositionId] = useState(fixedPosition?.id || defaultPositionId || '')
   const position = fixedPosition || positions.find((p) => p.id === positionId) || null
   const [form, setForm] = useState({
-    name: c.name || initialCareer?.name || '', stage: c.stage || '서류심사', result: c.result || '검토중',
+    name: c.name || initialCareer?.name || '', stage: c.stage || STAGES[0], result: c.result || '검토중',
     school: c.school || '', major: c.major || '', memo: c.memo || '',
   })
   const [career, setCareer] = useState(() => initialCareer || careerFromCandidate(c, suggestTrackForDept(position?.dept, false, position?.team)))
@@ -493,7 +495,10 @@ function CandidateModal({ position: fixedPosition, positions = [], defaultPositi
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>단계</label>
-            <input style={field} required value={form.stage} onChange={set('stage')} placeholder="예: 서류심사 / 1차면접 / 처우협의" />
+            <select style={field} required value={form.stage} onChange={set('stage')}>
+              {/* 예전에 직접 입력했던 단계(서류심사·입사 등)도 그대로 보이게 목록에 덧붙임 */}
+              {[...new Set([...STAGES, form.stage])].map((x) => <option key={x} value={x}>{x}</option>)}
+            </select>
           </div>
           <div style={{ flex: 1 }}>
             <label style={lbl}>결과</label>
