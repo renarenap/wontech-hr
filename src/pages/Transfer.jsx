@@ -4,11 +4,66 @@ import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, ORG_HEAD_ROLES, orgPat
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton, CascadeSelect } from '../components/ui'
 
 const TYPE_CFG = {
-  부서이동: { c: B, bg: '#e0f2fe' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
+  부서이동: { c: B, bg: '#e0f2fe' }, 보직발령: { c: '#be123c', bg: '#ffe4e6' }, 승진: { c: G, bg: '#dcfce7' }, 파견: { c: P, bg: '#f3e8ff' }, 직무변경: { c: O, bg: '#fff7ed' },
   휴직: { c: Y, bg: '#fef9c3' }, 직책변경: { c: '#0d9488', bg: '#ccfbf1' }, 겸직: { c: '#4f46e5', bg: '#e0e7ff' },
   겸직해제: { c: '#64748b', bg: '#f1f5f9' }, 근무지변경: { c: '#b45309', bg: '#fef3c7' },
 }
 const TYPES = Object.keys(TYPE_CFG)
+// 보직발령·직책변경 — 직급은 그대로 두고 소속 + 직책(팀장 등)을 맡기는 발령
+const ROLE_TYPES = ['보직발령', '직책변경']
+const roleLabel = (o, role) => { const path = orgPath(o) || '—'; const r = (role || '').trim(); return r ? `${path} (${r})` : path }
+
+// 직원 데이터에 있는 소속(부문 / 부문·본부 / 부문·본부·팀) 조합을 전부 모아서 검색용 목록으로
+function buildOrgPaths(employees) {
+  const map = new Map()
+  const add = (o) => { const k = orgPath(o); if (k && !map.has(k)) map.set(k, o) }
+  for (const e of employees) {
+    const division = e.division?.trim() || null, dept = e.dept?.trim() || null, team = e.team?.trim() || null
+    if (division) add({ division, dept: null, team: null })
+    if (dept) add({ division, dept, team: null })
+    if (team) add({ division, dept, team })
+    for (const p of concurrentPostsOf(e)) {
+      if (p?.team || p?.dept) add({ division: p.division?.trim() || null, dept: p.dept?.trim() || null, team: p.team?.trim() || null })
+    }
+  }
+  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ko')).map(([path, org]) => ({ path, org }))
+}
+
+// 소속 검색 입력 — 띄어쓰기로 나눈 단어가 모두 들어간 소속(부문 · 본부 · 팀)을 보여주고 클릭해서 선택
+function OrgSearch({ paths, value, onChange, onPick, placeholder, required }) {
+  const [open, setOpen] = useState(false)
+  const words = value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const hits = words.length ? paths.filter((p) => { const t = p.path.toLowerCase(); return words.every((w) => t.includes(w)) }).slice(0, 30) : []
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        style={field} required={required} value={value} placeholder={placeholder}
+        onChange={(e) => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+      />
+      {open && hits.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: -6, zIndex: 10,
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 8,
+          boxShadow: '0 8px 20px rgba(0,0,0,.1)', maxHeight: 220, overflow: 'auto',
+        }}>
+          {hits.map((p) => (
+            <div
+              key={p.path} onMouseDown={(ev) => { ev.preventDefault(); onPick(p.org); setOpen(false) }}
+              style={{ padding: '9px 12px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+              onMouseEnter={(ev) => { ev.currentTarget.style.background = '#f8fafc' }}
+              onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
+            >
+              {p.path}
+              <span style={{ color: '#94a3b8', marginLeft: 6, fontSize: 11 }}>{p.org.team ? ORG_LEVEL_LABEL.team : p.org.dept ? ORG_LEVEL_LABEL.dept : ORG_LEVEL_LABEL.division}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const STATUS_CFG = { 승인완료: { c: G, bg: '#dcfce7' }, 승인대기: { c: Y, bg: '#fef9c3' }, 반려: { c: R, bg: '#fee2e2' } }
 
 export default function Transfer() {
@@ -110,6 +165,8 @@ function AddTransferModal({ onClose, onCreated }) {
   const [toCustom, setToCustom] = useState({ division: '', dept: '', team: '' })
   const [applyOrg, setApplyOrg] = useState(true)
   const [postRole, setPostRole] = useState('') // 겸직 발령일 때 겸직 직책
+  const [newRole, setNewRole] = useState('') // 보직발령·직책변경일 때 새 직책
+  const [orgQuery, setOrgQuery] = useState('') // "변경 후" 소속 검색어
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -136,6 +193,17 @@ function AddTransferModal({ onClose, onCreated }) {
     }
   }, [employees, toOrg.division, toOrg.dept])
 
+  const orgPaths = useMemo(() => buildOrgPaths(employees), [employees])
+  // 검색에서 고른 소속을 부문/본부/팀 선택칸에 채움(목록에 없는 값이면 직접 입력 칸으로)
+  const applyPickedOrg = (o) => {
+    const t = {}, c = {}
+    for (const k of ['division', 'dept', 'team']) {
+      const v = o[k] || ''
+      if (v && !employees.some((e) => e[k]?.trim() === v)) { t[k] = '__custom__'; c[k] = v } else { t[k] = v; c[k] = '' }
+    }
+    setTo(t); setToCustom(c); setOrgQuery('')
+  }
+
   const matches = useMemo(() => {
     if (picked || !form.name.trim()) return []
     const q = form.name.trim().toLowerCase()
@@ -146,7 +214,7 @@ function AddTransferModal({ onClose, onCreated }) {
     setPicked(e)
     setForm((f) => ({
       ...f, name: e.name, rank: f.rank || e.rank,
-      from_value: f.from_value || orgPath(e),
+      from_value: f.from_value || (ROLE_TYPES.includes(f.type) ? roleLabel(e, e.role) : orgPath(e)),
     }))
     // 변경 후 소속은 현재 소속으로 채워두고, 바뀌는 칸만 고르면 되게(겸직은 빈 칸에서 새로 고름)
     if (form.type === '겸직') { setTo({ division: '', dept: '', team: '' }); setToCustom({ division: '', dept: '', team: '' }); return }
@@ -160,13 +228,16 @@ function AddTransferModal({ onClose, onCreated }) {
     if (form.type === '휴직' && !form.leave_start) { setError('휴직시작일을 입력해주세요.'); return }
     const isMove = form.type === '부서이동'
     const isPost = form.type === '겸직'
-    if ((isMove || isPost) && !orgPath(toOrg)) { setError(`변경 후 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return }
+    const isRole = ROLE_TYPES.includes(form.type)
+    if (isRole && !newRole.trim()) { setError('새 직책을 입력해주세요. (예: 팀장)'); return }
+    if ((isMove || isPost || isRole) && !orgPath(toOrg)) { setError(`변경 후 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}·${ORG_LEVEL_LABEL.team} 중 최소 하나는 선택하거나 입력해주세요.`); return }
     setSaving(true)
     // 휴직 유형은 변경전/후 대신 휴직시작~종료일을 그대로 그 두 칸에 담음(스키마 변경 없이 재사용)
     // 부서이동은 "변경 후"에 부문 · 본부 · 팀을 이어 붙여 저장
     const payload = form.type === '휴직'
       ? { ...form, from_value: form.leave_start, to_value: form.leave_end || '(진행중)' }
       : isMove ? { ...form, to_value: orgPath(toOrg) }
+      : isRole ? { ...form, to_value: roleLabel(toOrg, newRole) }
       : isPost ? { ...form, from_value: orgPath(picked || {}) || form.from_value || '—', to_value: postLabel({ ...toOrg, role: postRole }) } : form
     const { leave_start, leave_end, ...rest } = payload
     const { error } = await supabase.from('transfers').insert({ ...rest, employee_id: picked?.id || null })
@@ -186,6 +257,12 @@ function AddTransferModal({ onClose, onCreated }) {
     if (isMove && picked?.id && applyOrg && form.status !== '반려') {
       const { error: empErr } = await supabase.from('employees').update(toOrg).eq('id', picked.id)
       if (empErr) { setSaving(false); setError(`발령은 등록됐지만 소속 변경에 실패했어요: ${empErr.message}`); return }
+    }
+
+    // 보직발령·직책변경이면 실제 소속 + 직책(role)도 바로 바꿈 — 직급은 그대로, 반려 건은 제외
+    if (isRole && picked?.id && applyOrg && form.status !== '반려') {
+      const { error: empErr } = await supabase.from('employees').update({ ...toOrg, role: newRole.trim() }).eq('id', picked.id)
+      if (empErr) { setSaving(false); setError(`발령은 등록됐지만 소속·직책 변경에 실패했어요: ${empErr.message}`); return }
     }
 
     // 겸직 발령이면 그 직원의 겸직 목록에도 추가 — 반려 건은 제외
@@ -248,7 +325,10 @@ function AddTransferModal({ onClose, onCreated }) {
               style={field} value={form.type}
               onChange={(e) => {
                 const type = e.target.value
-                setForm({ ...form, type })
+                const wasRole = ROLE_TYPES.includes(form.type), isRoleNow = ROLE_TYPES.includes(type)
+                // 보직발령 ↔ 다른 유형 전환 시 "변경 전" 기본값을 직책 포함/미포함으로 맞춤
+                const from_value = picked && wasRole !== isRoleNow ? (isRoleNow ? roleLabel(picked, picked.role) : orgPath(picked)) : form.from_value
+                setForm({ ...form, type, from_value })
                 // 겸직 ↔ 부서이동 전환 시 "변경 후" 소속 기본값을 맞춤(겸직은 빈 칸, 부서이동은 현재 소속)
                 if (type === '겸직') setTo({ division: '', dept: '', team: '' })
                 else if (picked) setTo({ division: picked.division?.trim() || '', dept: picked.dept?.trim() || '', team: picked.team?.trim() || '' })
@@ -257,7 +337,7 @@ function AddTransferModal({ onClose, onCreated }) {
               {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
-          <div style={{ flex: 1 }}><label style={lbl}>직급</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>직급{ROLE_TYPES.includes(form.type) ? ' (변동 없음)' : ''}</label><input style={field} value={form.rank} onChange={set('rank')} /></div>
         </div>
         {form.type === '휴직' ? (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -277,9 +357,11 @@ function AddTransferModal({ onClose, onCreated }) {
               </>
             )}
             <label style={lbl}>{form.type === '겸직' ? '겸직 소속' : '변경 후'}</label>
-            {form.type === '부서이동' || form.type === '겸직' ? (
+            {form.type === '부서이동' || form.type === '겸직' || ROLE_TYPES.includes(form.type) ? (
               <>
                 <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 12px 2px', marginBottom: 10 }}>
+                  <label style={lbl}>소속 검색</label>
+                  <OrgSearch paths={orgPaths} value={orgQuery} onChange={setOrgQuery} onPick={applyPickedOrg} placeholder="팀·본부·부문 이름으로 검색 (예: 구매)" />
                   {['division', 'dept', 'team'].map((k) => (
                     <CascadeSelect
                       key={k} label={ORG_LEVEL_LABEL[k]} value={to[k]}
@@ -292,6 +374,13 @@ function AddTransferModal({ onClose, onCreated }) {
                       options={orgOptions[k]}
                     />
                   ))}
+                  {ROLE_TYPES.includes(form.type) && (
+                    <>
+                      <label style={lbl}>새 직책</label>
+                      <input style={field} list="transfer-new-roles" value={newRole} onChange={(e) => setNewRole(e.target.value)} placeholder={`예: 팀장${picked?.role ? ` (현재: ${picked.role})` : ''}`} />
+                      <datalist id="transfer-new-roles">{[...ORG_HEAD_ROLES, '팀원'].map((r) => <option key={r} value={r} />)}</datalist>
+                    </>
+                  )}
                   {form.type === '겸직' && (
                     <>
                       <label style={lbl}>겸직 직책</label>
@@ -305,6 +394,8 @@ function AddTransferModal({ onClose, onCreated }) {
                     <input type="checkbox" checked={applyOrg} onChange={(e) => setApplyOrg(e.target.checked)} />
                     {form.type === '겸직'
                       ? <>{picked.name}님의 겸직에 <b style={{ color: P }}>{postLabel({ ...toOrg, role: postRole })}</b> 바로 추가</>
+                      : ROLE_TYPES.includes(form.type)
+                      ? <>{picked.name}님의 소속·직책을 <b style={{ color: P }}>{roleLabel(toOrg, newRole)}</b>(으)로 바로 변경</>
                       : <>{picked.name}님의 소속을 <b style={{ color: P }}>{orgPath(toOrg) || '—'}</b>(으)로 바로 변경</>}
                   </label>
                 ) : (
@@ -315,7 +406,12 @@ function AddTransferModal({ onClose, onCreated }) {
                 )}
               </>
             ) : (
-              <input style={field} required value={form.to_value} onChange={set('to_value')} placeholder="예: B2C사업부 · B2C사업팀" />
+              <OrgSearch
+                paths={orgPaths} required value={form.to_value}
+                onChange={(v) => setForm((f) => ({ ...f, to_value: v }))}
+                onPick={(o) => setForm((f) => ({ ...f, to_value: orgPath(o) }))}
+                placeholder="팀·본부 이름으로 검색하거나 직접 입력"
+              />
             )}
           </>
         )}
