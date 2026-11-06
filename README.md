@@ -9,7 +9,7 @@ Vite + React + React Router + Supabase(Auth/DB)로 구성되어 있고, GitHub P
 ## 0. 진행 상태 (전부 완료)
 
 - ✅ Node.js / npm 설치, `npm install` / `npm run build` 정상 동작 확인
-- ✅ Supabase 테이블 생성(`schema.sql`) + 샘플 데이터(`seed.sql`) 적재
+- ✅ Supabase 테이블 생성(`schema.sql`) + 실제 명단 적재 (명단이 담긴 SQL 파일은 공개 저장소라 삭제함)
 - ✅ 관리자 계정 생성 (wowbagger12@gmail.com)
 - ✅ admin-users Edge Function 배포 및 동작 확인
 - ✅ GitHub 저장소 연결, Secrets 등록, Pages(GitHub Actions) 설정
@@ -18,7 +18,7 @@ Vite + React + React Router + Supabase(Auth/DB)로 구성되어 있고, GitHub P
 ## 1. Supabase 설정
 
 1. Supabase 대시보드 → 해당 프로젝트 → **SQL Editor**에서 [supabase/schema.sql](supabase/schema.sql) 전체 내용을 실행해 테이블 생성 + RLS 정책까지 한 번에 적용합니다. *(이미 완료됨)*
-2. (선택) [supabase/seed.sql](supabase/seed.sql)로 샘플 데이터를 채울 수 있습니다. *(이미 완료됨 — 실제 운영 전엔 지우고 시작하세요)*
+2. ⚠️ 이 저장소는 공개(Public)라 **실제 직원 이름·포인트 등 명단 데이터를 SQL 파일로 커밋하지 마세요.** 명단 적재/수정 SQL은 SQL Editor에서만 실행하고 저장소에는 올리지 않습니다.
 3. 이미 확인된 연결 정보 (로컬 `.env`에 반영되어 있음):
    - Project URL: `https://ybkkvuuvkyqkylzsrgny.supabase.co`
    - anon(publishable) key: `.env` 파일 참고 (git에는 커밋되지 않음)
@@ -92,7 +92,6 @@ src/
     AccountManage.jsx         계정 관리 (/accounts, 관리자 전용 그룹)
 supabase/
   schema.sql            테이블 + RLS 정책
-  seed.sql               (선택) 샘플 데이터
   functions/
     admin-users/index.ts  계정 조회/생성/역할변경/비밀번호재설정/삭제 서버 함수
 ```
