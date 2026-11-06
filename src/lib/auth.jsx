@@ -17,7 +17,8 @@ export function AuthProvider({ children }) {
   const value = {
     session,
     user: session?.user ?? null,
-    isAdmin: !!session?.user?.user_metadata?.is_admin,
+    // app_metadata는 서버(service role)만 쓸 수 있어 사용자가 스스로 관리자 표시를 넣을 수 없음
+    isAdmin: !!session?.user?.app_metadata?.is_admin,
     loading: session === undefined,
     signOut: () => supabase.auth.signOut(),
   }
