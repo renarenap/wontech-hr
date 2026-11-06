@@ -2,7 +2,6 @@ import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-d
 import { AuthProvider, useAuth } from './lib/auth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
@@ -61,14 +60,6 @@ export default function App() {
             element={
               <RedirectIfAuthed>
                 <Login />
-              </RedirectIfAuthed>
-            }
-          />
-          <Route
-            path="/signup"
-            element={
-              <RedirectIfAuthed>
-                <Signup />
               </RedirectIfAuthed>
             }
           />

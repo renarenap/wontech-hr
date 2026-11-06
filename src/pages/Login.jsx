@@ -50,7 +50,7 @@ export default function Login() {
           {loading ? '로그인 중…' : '로그인'}
         </button>
         <div style={{ marginTop: 16, fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
-          계정이 없으신가요? <Link to="/signup" style={{ color: '#FF4800', fontWeight: 600, textDecoration: 'none' }}>가입하기</Link>
+          계정이 필요하면 관리자에게 요청해주세요.
         </div>
       </form>
     </AuthShell>
