@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept } from '../lib/constants'
-import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, CascadeSelect, todayStr } from '../components/ui'
+import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, CascadeSelect, RoleSelect, todayStr } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
 import Resign from './Resign'
@@ -13,11 +13,11 @@ function SectionTitle({ icon, children }) {
 
 // ═══ 공용 로직: 승진포인트 employees 데이터에 입사자 추가 (+ 온보딩/입사체크리스트) ═══
 // req_tenure/threshold는 더 이상 employees 행에 저장하지 않고 rank_criteria 파라미터 테이블에서 읽어옴(하드코딩 금지)
-async function addHireToRoster({ name, division = null, dept, team = null, locations = [], rank, track, join_date, level = 0, backfillFullTenure = false }) {
+async function addHireToRoster({ name, division = null, dept, team = null, locations = [], rank, track, role = '팀원', join_date, level = 0, backfillFullTenure = false }) {
   const { data: emp, error: e1 } = await supabase
     .from('employees')
     .insert({
-      name, division, dept, team, locations, rank, track, role: '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
+      name, division, dept, team, locations, rank, track, role: (role || '').trim() || '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
       backfill_full_tenure: backfillFullTenure, join_date: join_date || null,
     })
     .select()
@@ -260,6 +260,7 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
   const [joinDate, setJoinDate] = useState('')
   const [rank, setRank] = useState(initial.rank || '')
   const [track, setTrack] = useState(initial.track || '')
+  const [role, setRole] = useState(initial.role || '팀원')
   const [trackTouched, setTrackTouched] = useState(!!initial.track)
   const [level, setLevel] = useState(initial.level ?? 0)
   const [backfillFullTenure, setBackfillFullTenure] = useState(false)
@@ -428,7 +429,7 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
       if (!window.confirm(`같은 이름의 직원이 이미 있어요:\n${list}\n\n동명이인(다른 사람)이 맞으면 [확인]을 눌러 등록해주세요.`)) { setSaving(false); return }
     }
     try {
-      const emp = await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, join_date: joinDate, level, backfillFullTenure })
+      const emp = await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, role, join_date: joinDate, level, backfillFullTenure })
       onCreated(emp)
     } catch (err) {
       setError(err.message)
@@ -501,6 +502,9 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
             {EXEC_RANKS.map((r) => <option key={r} value={r}>{r}</option>)}
           </optgroup>
         </select>
+
+        <label style={lbl}>직책 (팀장·본부장 등 조직장이면 선택 — 조직도에 장으로 표시돼요)</label>
+        <RoleSelect value={role} onChange={setRole} />
 
         <label style={lbl}>직군</label>
         <select
