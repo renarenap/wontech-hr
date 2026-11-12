@@ -219,6 +219,24 @@ export default function HireResign() {
   )
 }
 
+// 팀 이름 → 그 팀이 실제 명단에서 속해 있는 (부문, 본부) 조합들.
+// 본부가 비어 있는 조합(부문 직속 팀, 예: 연구원 직속 품질관리팀)도 그대로 살리되,
+// 같은 팀에 더 채워진 조합이 있으면(예: 누구는 본부를 안 적었음) 덜 채워진 쪽은 입력 누락으로 보고 흡수함
+function buildTeamOrigins(rows) {
+  const byTeam = {}
+  rows.forEach((r) => {
+    if (!r.team) return
+    const o = { division: r.division || '', dept: r.dept || '' }
+    ;(byTeam[r.team] ??= new Map()).set(`${o.division}\u0000${o.dept}`, o)
+  })
+  const out = {}
+  Object.entries(byTeam).forEach(([t, m]) => {
+    const combos = [...m.values()]
+    out[t] = combos.filter((a) => !combos.some((b) => b !== a && (!a.division || a.division === b.division) && (!a.dept || a.dept === b.dept)))
+  })
+  return out
+}
+
 // 부문→본부→팀처럼 상위 선택에 따라 하위 옵션이 좁혀지는 select. value가 목록에 없으면(직접입력) 텍스트 입력칸이 따로 뜸.
 // required=false면 맨 위 빈 옵션("없음")을 고를 수 있어 안 채워도 되고, required=true면 그 옵션이 비활성이라 뭔가 골라야 함.
 // ═══ 입사자 등록 ═══
@@ -296,6 +314,15 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
       pick(initial.division, [...new Set(rows.map((r) => r.division).filter(Boolean))], setDivision, setCustomDivision)
       pick(initial.dept, deptOpts, setDept, setCustomDept)
       pick(initial.team, teamOpts, setTeam, setCustomTeam)
+      // 채용 탭에서 팀만 넘어온 경우 — 명단상 그 팀이 한 곳에만 있으면 부문·본부도 채움
+      if (initial.team && !initial.division && !initial.dept) {
+        const combos = buildTeamOrigins(rows)[initial.team] || []
+        if (combos.length === 1) {
+          if (combos[0].division) setDivision(combos[0].division)
+          if (combos[0].dept) setDept(combos[0].dept)
+          setTeam(initial.team); setCustomTeam('')
+        }
+      }
     })
   }, [])
 
@@ -308,6 +335,51 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
     : (!deptVal && divisionVal && teamsByDivision[divisionVal]?.length) ? teamsByDivision[divisionVal]
     : teams
   const isResearch = RESEARCH_RANKS.includes(rank)
+
+  // ── 팀/본부 → 상위 소속 자동 입력 ──
+  const teamOrigins = useMemo(() => buildTeamOrigins(roster), [roster])
+  const deptDivisions = useMemo(() => {
+    const m = {}
+    roster.forEach((r) => { if (r.dept && r.division) (m[r.dept] ??= new Set()).add(r.division) })
+    return m
+  }, [roster])
+  // 팀 검색 목록: "부문 · 본부 · 팀" 경로 단위 (같은 이름의 팀이 여러 곳에 있어도 구분되게)
+  const teamPaths = useMemo(() => Object.entries(teamOrigins)
+    .flatMap(([t, combos]) => combos.map((o) => ({ ...o, team: t, path: orgPath({ ...o, team: t }) })))
+    .sort((a, b) => a.path.localeCompare(b.path, 'ko')), [teamOrigins])
+  const [teamQuery, setTeamQuery] = useState('')
+  const [orgHint, setOrgHint] = useState('')
+
+  // 팀을 정하면 그 팀이 속한 부문·본부를 채움. 본부 없는 부문 직속 팀이면 본부는 비움.
+  // 같은 이름의 팀이 여러 곳에 있으면 공통인 단계만 채우고 나머지는 직접 고르게 둠
+  const applyTeam = (t, origin) => {
+    setTeam(t); setCustomTeam('')
+    const combos = origin ? [origin] : (teamOrigins[t] || [])
+    if (combos.length === 0) { setOrgHint(''); return }
+    if (combos.length === 1) {
+      setDivision(combos[0].division); setCustomDivision('')
+      setDept(combos[0].dept); setCustomDept('')
+      setOrgHint(`'${t}' 소속으로 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}를 자동으로 채웠어요.`)
+      return
+    }
+    const same = (k) => (combos.every((o) => o[k] === combos[0][k]) ? combos[0][k] : null)
+    const div = same('division'), dp = same('dept')
+    if (div) { setDivision(div); setCustomDivision('') }
+    if (dp) { setDept(dp); setCustomDept('') }
+    setOrgHint(`'${t}'은(는) 여러 곳에 있는 팀 이름이에요 (${combos.map((o) => orgPath(o) || '소속 없음').join(' / ')}) — ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}를 확인해주세요.`)
+  }
+  const changeTeam = (v) => {
+    if (v && v !== '__custom__') applyTeam(v)
+    else { setTeam(v); setCustomTeam(''); setOrgHint('') }
+  }
+  const searchTeam = (v) => {
+    setTeamQuery(v)
+    const q = v.trim()
+    const hit = teamPaths.find((p) => p.path === q)
+    if (hit) { applyTeam(hit.team, hit); setTeamQuery(''); return }
+    if (teamOrigins[q]) applyTeam(q)
+  }
+
   // 이름을 치는 대로 기존 직원 중 이름이 겹치는 사람을 바로 보여줌 (동명이인·중복 등록 확인용) — 같은 이름이 맨 위
   const nameMatches = useMemo(() => {
     const q = name.trim().toLowerCase()
@@ -319,8 +391,16 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
   }, [roster, name])
 
   // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
-  const changeDivision = (v) => { setDivision(v); setCustomDivision(''); setDept(''); setCustomDept(''); setTeam(''); setCustomTeam('') }
-  const changeDept = (v) => { setDept(v); setCustomDept(''); setTeam(''); setCustomTeam('') }
+  const changeDivision = (v) => { setDivision(v); setCustomDivision(''); setDept(''); setCustomDept(''); setTeam(''); setCustomTeam(''); setOrgHint('') }
+  // 본부를 고르면 부문이 비어 있을 때 그 본부가 속한 부문을 채움 (명단상 한 부문에만 있을 때)
+  const changeDept = (v) => {
+    setDept(v); setCustomDept(''); setTeam(''); setCustomTeam(''); setOrgHint('')
+    const divs = deptDivisions[v]
+    if (v && v !== '__custom__' && !divisionVal && divs?.size === 1) {
+      setDivision([...divs][0]); setCustomDivision('')
+      setOrgHint(`'${v}' 소속 ${ORG_LEVEL_LABEL.division}를 자동으로 채웠어요.`)
+    }
+  }
 
   // 부서/직위가 바뀌면 직군을 자동 제안 — 사용자가 직접 고른 뒤엔(trackTouched) 더 이상 덮어쓰지 않음
   useEffect(() => {
@@ -378,6 +458,18 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
         <label style={lbl}>위치</label>
         <LocationPicker value={locations} onChange={setLocations} />
 
+        <label style={lbl}>{ORG_LEVEL_LABEL.team} 검색</label>
+        <input
+          style={field} list="hire-team-paths" value={teamQuery} onChange={(e) => searchTeam(e.target.value)}
+          placeholder={`${ORG_LEVEL_LABEL.team} 이름을 치면 ${ORG_LEVEL_LABEL.division}·${ORG_LEVEL_LABEL.dept}까지 자동으로 채워져요 (예: 생산기술1팀)`}
+        />
+        <datalist id="hire-team-paths">
+          {teamPaths.map((p) => <option key={p.path} value={p.path} />)}
+        </datalist>
+        {orgHint && (
+          <div style={{ fontSize: 11, color: '#0369a1', marginTop: -6, marginBottom: 10 }}>{orgHint}</div>
+        )}
+
         <CascadeSelect
           label={ORG_LEVEL_LABEL.division} value={division} onChange={changeDivision}
           customValue={customDivision} onCustomChange={setCustomDivision} options={divisions}
@@ -389,7 +481,7 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
         />
 
         <CascadeSelect
-          label={ORG_LEVEL_LABEL.team} value={team} onChange={(v) => { setTeam(v); setCustomTeam('') }}
+          label={ORG_LEVEL_LABEL.team} value={team} onChange={changeTeam}
           customValue={customTeam} onCustomChange={setCustomTeam} options={teamOptions}
         />
 
