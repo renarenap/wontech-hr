@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, ORG_HEAD_ROLES, orgPath, concurrentPostsOf, postLabel, editTransfers, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, concurrentPostsOf, postLabel, editTransfers, O, P, G, Y, R, B } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
@@ -11,7 +11,7 @@ import {
   fetchCertEntries, addCertEntry, deleteCertEntry, CERT_CATEGORY_CAP, CERT_CATEGORY_DEFAULT_PTS, CERT_CATEGORIES,
   fetchTechEntries, addTechEntry, deleteTechEntry, TECH_CATEGORY_DEFAULT_PTS, TECH_CATEGORIES, TECH_TOTAL_CAP,
 } from '../lib/certTech'
-import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, CascadeSelect, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
+import { SB, Bd, NoteFlagBadge, LocationBadges, LocationPicker, CascadeSelect, RoleSelect, Prog, TenureBar, Tip, crd, Loading, ErrorBox, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 export default function EmployeeDetail() {
   const { id } = useParams()
@@ -548,12 +548,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
         </div>
 
         <label style={lbl}>직책 (부문장·본부장·팀장 등 조직장이면 지정 — 조직도에 장으로 표시돼요. 아니면 팀원)</label>
-        <input style={field} list="org-head-roles" value={form.role} onChange={set('role')} placeholder="팀원" />
-        <datalist id="org-head-roles">
-          {['팀원', ...ORG_HEAD_ROLES].map((r) => <option key={r} value={r} />)}
-        </datalist>
+        <RoleSelect value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v }))} />
 
-        <label style={lbl}>겸직 (본 소속 외에 추가로 맡는 소속·직책)</label>
+        <label style={lbl}>겸직 (본 소속 외에 추가로 맡는 소속·직책 — 예: 본부장이면서 다른 부문의 부문장대행이면 그 부문 + 부문장대행)</label>
         {posts.map((p, i) => (
           <div key={i} style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px 2px', marginBottom: 8 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -572,10 +569,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                style={{ ...field, flex: 1 }} list="org-head-roles" value={p.role} placeholder="겸직 직책 (예: 팀장)"
-                onChange={(ev) => updatePost(i, { role: ev.target.value })}
-              />
+              <RoleSelect value={p.role} emptyLabel="겸직 직책 선택" onChange={(v) => updatePost(i, { role: v })} />
               <button
                 type="button" title="이 겸직 삭제" onClick={() => setPosts(posts.filter((_, j) => j !== i))}
                 style={{ ...btnGhost, padding: '6px 10px', marginBottom: 10 }}
