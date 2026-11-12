@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank, headLevelOf } from '../lib/constants'
+import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank, headLevelOf, concurrentPostsOf } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 // ═══ 조직도 — 부문 → 본부 → 팀 ═══
@@ -32,7 +32,12 @@ const headTitle = (h, level) => (h.role && h.role !== '팀원' ? h.role : headLa
 
 // 직원 배열 → 트리 노드 { level, name, path, members, heads, children }
 function buildTree(emps) {
-  const explicit = emps.some((e) => headLevelOf(e))
+  // 겸직으로 맡은 조직장(예: 본 소속은 본부장, 겸직으로 다른 부문의 부문장대행)도 그 조직의 장으로 표시.
+  // 겸직 소속·직책을 덮어쓴 사본이라 그 조직 명단(members)에는 안 들어가고 장 표시에만 쓰임
+  const postHeads = emps.flatMap((e) => concurrentPostsOf(e)
+    .map((p) => ({ ...e, division: norm(p.division), dept: norm(p.dept), team: norm(p.team), role: p.role, viaPost: true }))
+    .filter((h) => headLevelOf(h)))
+  const explicit = postHeads.length > 0 || emps.some((e) => headLevelOf(e))
   const build = (list, depth, prefix) => {
     const level = LEVELS[depth]
     const groups = new Map()
@@ -46,7 +51,10 @@ function buildTree(emps) {
       const lower = LEVELS.slice(depth + 1)
       let heads = []
       if (explicit) {
-        if (name !== null) heads = members.filter((m) => headLevelOf(m) === level).sort((a, b) => rankIdx(a.rank) - rankIdx(b.rank))
+        if (name !== null) {
+          const viaPost = postHeads.filter((h) => headLevelOf(h) === level && path.every((v, i) => h[LEVELS[i]] === v))
+          heads = [...members.filter((m) => headLevelOf(m) === level), ...viaPost].sort((a, b) => rankIdx(a.rank) - rankIdx(b.rank))
+        }
       } else if (name !== null && lower.length) {
         const cand = members.filter((m) => lower.every((l) => m[l] === null) && HEAD_RANKS.includes(baseRank(m.rank)))
         if (cand.length && cand.length < members.length) heads = cand.sort((a, b) => rankIdx(a.rank) - rankIdx(b.rank))
@@ -81,7 +89,7 @@ export default function OrgChart() {
   const detailRef = useRef(null)
 
   const load = async () => {
-    const { data, error } = await supabase.from('employees').select('id, name, rank, role, division, dept, team, locations')
+    const { data, error } = await supabase.from('employees').select('*')
     if (error) { setError(error); return }
     setEmps((data || []).map((e) => ({ ...e, division: norm(e.division), dept: norm(e.dept), team: norm(e.team) })))
   }

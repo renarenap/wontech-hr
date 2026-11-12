@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { GRADE_COLOR, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, G, P, Y, R, B, O } from '../lib/constants'
+import { GRADE_COLOR, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, ORG_HEAD_ROLES, G, P, Y, R, B, O } from '../lib/constants'
 
 // ═══ 공통 스타일 ═══
 export const thS = {
@@ -336,6 +336,30 @@ export function LocationPicker({ value, onChange }) {
 }
 
 // 부문·본부·팀처럼 "기존 값 드롭다운 + 새 값 직접 입력"이 필요한 칸 — value가 '__custom__'이면 아래 입력칸이 열림
+// 직책 드롭다운 — 팀원/부문장/부문장대행/본부장… 중에서 고르고, 목록에 없는 직책은 "직접 입력"
+// emptyLabel을 주면 맨 위에 빈 값('') 옵션을 둠(겸직 직책처럼 비워도 되는 칸), 없으면 빈 값은 '팀원'으로 보여줌
+export function RoleSelect({ value, onChange, emptyLabel, style }) {
+  const opts = ['팀원', ...ORG_HEAD_ROLES]
+  const [custom, setCustom] = useState(() => !!value && !opts.includes(value))
+  const sel = custom ? '__custom__' : (value || (emptyLabel ? '' : '팀원'))
+  return (
+    <div style={{ flex: 1, minWidth: 0, ...style }}>
+      <select
+        style={field} value={sel}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v === '__custom__') { setCustom(true); onChange('') } else { setCustom(false); onChange(v) }
+        }}
+      >
+        {emptyLabel && <option value="">{emptyLabel}</option>}
+        {opts.map((r) => <option key={r} value={r}>{r}</option>)}
+        <option value="__custom__">+ 직접 입력</option>
+      </select>
+      {custom && <input style={field} value={value} onChange={(e) => onChange(e.target.value)} placeholder="직책명 (예: 연구소장대행)" />}
+    </div>
+  )
+}
+
 export function CascadeSelect({ label: text, value, onChange, customValue, onCustomChange, options, required }) {
   const isCustom = value === '__custom__'
   return (

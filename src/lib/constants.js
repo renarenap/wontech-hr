@@ -117,11 +117,12 @@ export const ORG_LEVEL_LABEL = { division: '부문', dept: '본부', team: '팀'
 
 // ═══ 조직장 — employees.role(직책) 칸으로 지정 (기본값 '팀원') ═══
 // 부문장/본부장/팀장은 이름 그대로 그 단계의 장. 연구소장·실장·법인장 등 그 밖의 '~장'은
-// 그 사람 소속 중 가장 아래 단계(팀 > 본부 > 부문)의 장으로 봄
-export const ORG_HEAD_ROLES = ['부문장', '본부장', '연구소장', '실장', '법인장', '팀장']
+// 그 사람 소속 중 가장 아래 단계(팀 > 본부 > 부문)의 장으로 봄.
+// '~장대행'(예: 부문장대행)도 그 단계의 장으로 봄 — 조직도에는 '부문장대행'이라고 그대로 표시됨
+export const ORG_HEAD_ROLES = ['부문장', '부문장대행', '본부장', '본부장대행', '연구소장', '실장', '법인장', '팀장', '팀장대행']
 const HEAD_ROLE_LEVEL = { 부문장: 'division', 본부장: 'dept', 연구소장: 'dept', 팀장: 'team' }
 export function headLevelOf(e) {
-  const r = (e?.role || '').trim()
+  const r = (e?.role || '').trim().replace(/\s*\(?(직무)?대행\)?$/, '')
   if (!r || r === '팀원' || !r.endsWith('장')) return null
   const lv = HEAD_ROLE_LEVEL[r] || [...['team', 'dept', 'division']].find((l) => e[l])
   return lv && e[lv] ? lv : null
