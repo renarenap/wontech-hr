@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O, P, G, Y, R, B, TRACK_LABEL, baseRank, EXEC_CANDIDATE_RANKS, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
+import { O, P, G, Y, R, B, TRACK_LABEL, baseRank, EXEC_CANDIDATE_RANKS, STATUS_LABEL, LOCATIONS, LOCATION_STYLE, ORG_LEVEL_LABEL, orgPath, displayName } from '../lib/constants'
 import { downloadCSV } from '../lib/csv'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import {
@@ -585,7 +585,7 @@ function OutlookSection({ rows, period, grade, setGrade, includeAlready, setIncl
                   const o = e.outlook
                   return (
                     <RowHover key={e.id} onClick={() => goTo(e.id)}>
-                      <td style={nameTd}>{e.name}</td>
+                      <td style={nameTd}>{displayName(e)}</td>
                       <td style={tdS}>{e.rank}</td>
                       <td style={tdS}>{e.dept || '—'}</td>
                       <td style={tdS}>{(e.locations || []).map(shortLoc).join('·') || '—'}</td>
@@ -656,7 +656,7 @@ function GoodSection({ rows, goTo, recentN, setRecentN, goodMin, setGoodMin, min
             <tbody>
               {sortByLoc(list, locSort).map((e) => (
                 <RowHover key={e.id} onClick={() => goTo(e.id)}>
-                  <td style={nameTd}>{e.name}</td>
+                  <td style={nameTd}>{displayName(e)}</td>
                   <td style={tdS}>{e.rank}</td>
                   <td style={tdS}>{e.dept || '—'}</td>
                   <td style={tdS}>{(e.locations || []).map(shortLoc).join('·') || '—'}</td>
@@ -774,7 +774,7 @@ function WatchSection({ rows, goTo, recentN }) {
               <tbody>
                 {sortByLoc(list, locSort).map((e) => (
                   <RowHover key={e.id} onClick={() => goTo(e.id)}>
-                    <td style={nameTd}>{e.name}</td>
+                    <td style={nameTd}>{displayName(e)}</td>
                     <td style={tdS}>{e.rank}</td>
                     <td style={tdS}>{e.dept || '—'}</td>
                     <td style={tdS}>{(e.locations || []).map(shortLoc).join('·') || '—'}</td>

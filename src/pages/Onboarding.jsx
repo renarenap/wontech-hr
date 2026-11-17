@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, ORG_LEVEL_LABEL, orgPath } from '../lib/constants'
+import { P, G, O, Y, ORG_LEVEL_LABEL, orgPath, displayName } from '../lib/constants'
 import { Bd, Check, KpiRow, LocationBadges, LocationPicker, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton } from '../components/ui'
 
 export const DEFAULT_TASKS = [
@@ -32,7 +32,7 @@ export default function Onboarding({ hideAdd = false }) {
   const load = async () => {
     const { data, error } = await supabase
       .from('onboarding')
-      .select('*, employees(name, division, dept, team, locations, rank), onboarding_tasks(*)')
+      .select('*, employees(*), onboarding_tasks(*)')
       .order('join_date', { ascending: false })
     if (error) { setError(error); return }
     setList((data || []).map(withDerived))
@@ -90,7 +90,7 @@ export default function Onboarding({ hideAdd = false }) {
                       onClick={() => setSel(o.id === sel ? null : o.id)}
                       onMouseEnter={(ev) => { if (sel !== o.id) ev.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={(ev) => { if (sel !== o.id) ev.currentTarget.style.background = 'transparent' }}>
-                      <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
+                      <td style={{ ...tdS, fontWeight: 600 }}>{displayName(e)}</td>
                       <td style={tdS}><LocationBadges locations={e.locations} /></td>
                       <td style={{ ...tdS, color: '#64748b' }}>{orgPath(e)}</td>
                       <td style={tdS}>{e.rank}</td>
@@ -108,7 +108,7 @@ export default function Onboarding({ hideAdd = false }) {
         </div>
         {s && (
           <div style={crd}>
-            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{s.employees?.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{displayName(s.employees)}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
               <LocationBadges locations={s.employees?.locations} />
               <div style={{ fontSize: 12, color: '#64748b' }}>{orgPath(s.employees || {})} · {s.employees?.rank} · 멘토: {s.mentor}</div>

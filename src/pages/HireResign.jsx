@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept } from '../lib/constants'
+import { O, G, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, TRACKS, TRACK_LABEL, DEPT_OPTIONS, ORG_LEVEL_LABEL, orgPath, suggestTrackForDept, displayName } from '../lib/constants'
 import { crd, thS, tdS, Modal, field, label as lbl, btnPrimary, btnGhost, Loading, EmptyState, Bd, LocationBadges, LocationPicker, CascadeSelect, RoleSelect, todayStr } from '../components/ui'
 import { parseChangesDocx, isTrackedRank } from '../lib/docxChanges'
 import Hire from './Hire'
@@ -13,12 +13,14 @@ function SectionTitle({ icon, children }) {
 
 // ═══ 공용 로직: 승진포인트 employees 데이터에 입사자 추가 (+ 온보딩/입사체크리스트) ═══
 // req_tenure/threshold는 더 이상 employees 행에 저장하지 않고 rank_criteria 파라미터 테이블에서 읽어옴(하드코딩 금지)
-async function addHireToRoster({ name, division = null, dept, team = null, locations = [], rank, track, role = '팀원', join_date, level = 0, backfillFullTenure = false }) {
+async function addHireToRoster({ name, nameTag = '', division = null, dept, team = null, locations = [], rank, track, role = '팀원', join_date, level = 0, backfillFullTenure = false }) {
   const { data: emp, error: e1 } = await supabase
     .from('employees')
     .insert({
       name, division, dept, team, locations, rank, track, role: (role || '').trim() || '팀원', level: Number(level) || 0, req_tenure: 0, threshold: 0, base_pts: 0,
       backfill_full_tenure: backfillFullTenure, join_date: join_date || null,
+      // 동명이인 구분은 있을 때만 넣음 — 마이그레이션 전 DB(컬럼 없음)에서도 입사 등록이 막히지 않게
+      ...(nameTag.trim() ? { name_tag: nameTag.trim() } : {}),
     })
     .select()
     .single()
@@ -62,7 +64,7 @@ async function resignEmployee(picked, lastDay) {
   if (epending) throw new Error(epending.message)
 
   const { error: e2 } = await supabase.from('employees_archive').insert({
-    original_id: picked.id, name: picked.name, division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
+    original_id: picked.id, name: picked.name, ...(picked.name_tag ? { name_tag: picked.name_tag } : {}), division: picked.division, dept: picked.dept, team: picked.team, locations: picked.locations, rank: picked.rank,
     track: picked.track, role: picked.role, level: picked.level, req_tenure: picked.req_tenure, threshold: picked.threshold,
     base_pts: picked.base_pts, eng_pts: picked.eng_pts, cn_pts: picked.cn_pts, jp_pts: picked.jp_pts, cert_pts: picked.cert_pts, tech_pts: picked.tech_pts, award_pts: picked.award_pts,
     eng_lifetime: picked.eng_lifetime, cn_lifetime: picked.cn_lifetime, jp_lifetime: picked.jp_lifetime, backfill_full_tenure: picked.backfill_full_tenure,
@@ -104,6 +106,7 @@ async function restoreEmployee(archived) {
     pending_resolved: !!archived.pending_resolved, pending_release_points: archived.pending_release_points || 0,
     join_date: archived.join_date, leave_start_date: archived.leave_start_date, leave_end_date: archived.leave_end_date,
     ...(archived.concurrent_posts?.length ? { concurrent_posts: archived.concurrent_posts } : {}),
+    ...(archived.name_tag ? { name_tag: archived.name_tag } : {}),
   }
   if (archived.original_id) payload.id = archived.original_id // 되도록 원래 id로 복구(발령 등 참조 연속성)
 
@@ -264,11 +267,14 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
   const [trackTouched, setTrackTouched] = useState(!!initial.track)
   const [level, setLevel] = useState(initial.level ?? 0)
   const [backfillFullTenure, setBackfillFullTenure] = useState(false)
+  // 동명이인 구분 — 새 입사자 것(nameTag) + 구분이 아직 없는 기존 동명이인 것(existingTags: {id: 구분})
+  const [nameTag, setNameTag] = useState('')
+  const [existingTags, setExistingTags] = useState({})
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('employees').select('id, name, division, dept, team, rank, join_date').then(({ data }) => {
+    supabase.from('employees').select('*').then(({ data }) => {
       setRoster(data || [])
       // 본부는 조직도 기준 목록 + 실제 데이터를 합쳐서, 부문·팀은 실제 데이터에 있는 값만 — 각각 전체 드롭다운으로 보여줌
       const rows = data || []
@@ -390,6 +396,9 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
       .sort((a, b) => (b.name.trim().toLowerCase() === q) - (a.name.trim().toLowerCase() === q) || a.name.localeCompare(b.name, 'ko'))
       .slice(0, 6)
   }, [roster, name])
+  // 이름이 정확히 같은 기존 직원 = 동명이인 → 이때만 구분 칸을 보여주고 필수로 받음
+  const sameNameEmps = useMemo(() => roster.filter((e) => e.name?.trim() === name.trim()), [roster, name])
+  const untaggedSame = sameNameEmps.filter((e) => !e.name_tag)
 
   // 상위 선택이 바뀌면 하위에 골라둔 값이 새 목록에 없을 수도 있어서 리셋
   const changeDivision = (v) => { setDivision(v); setCustomDivision(''); setDept(''); setCustomDept(''); setTeam(''); setCustomTeam(''); setOrgHint('') }
@@ -420,16 +429,28 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
     if (!rank) { setError('직위를 선택해주세요.'); return }
     if (!track) { setError('직군을 선택해주세요.'); return }
 
+    // 동명이인이면 새 입사자와 (구분이 아직 없는) 기존 직원 모두 구분이 있어야 함 — 아마란스처럼 "이준영(생산)"으로 구분
+    if (sameNameEmps.length > 0) {
+      const tag = nameTag.trim()
+      if (!tag) { setError(`같은 이름의 직원이 이미 있어요 — 새 입사자의 구분을 입력해주세요 (예: 생산)`); return }
+      if (untaggedSame.some((e) => !(existingTags[e.id] || '').trim())) { setError('기존 동명이인 직원의 구분도 입력해주세요'); return }
+      const allTags = [tag, ...sameNameEmps.map((e) => e.name_tag || existingTags[e.id].trim())]
+      if (new Set(allTags).size !== allTags.length) { setError(`구분이 겹쳐요 (${allTags.join(', ')}) — 서로 다르게 입력해주세요`); return }
+      const list = sameNameEmps.map((e) => `· ${name.trim()}(${e.name_tag || existingTags[e.id].trim()}) — ${orgPath(e) || '소속 없음'} · ${e.rank || '-'}${e.join_date ? ` · 입사 ${e.join_date}` : ''}`).join('\n')
+      if (!window.confirm(`동명이인으로 등록해요:\n${list}\n· ${name.trim()}(${tag}) — 새 입사자\n\n같은 사람을 두 번 등록하는 게 아니면 [확인]을 눌러주세요.`)) return
+    }
+
     setSaving(true)
-    // 같은 이름이 이미 있으면 동명이인인지(진짜 다른 사람인지) 한 번 확인 — 같은 사람을 실수로 두 번 등록하는 걸 막기 위함
-    const { data: sameName, error: eDup } = await supabase.from('employees').select('name, division, dept, team, rank, join_date').eq('name', name.trim())
-    if (eDup) { setError(eDup.message); setSaving(false); return }
-    if (sameName?.length > 0) {
-      const list = sameName.map((e) => `· ${e.name} (${orgPath(e) || '소속 없음'} · ${e.rank || '-'}${e.join_date ? ` · 입사 ${e.join_date}` : ''})`).join('\n')
-      if (!window.confirm(`같은 이름의 직원이 이미 있어요:\n${list}\n\n동명이인(다른 사람)이 맞으면 [확인]을 눌러 등록해주세요.`)) { setSaving(false); return }
+    // 기존 동명이인에게 구분을 먼저 붙임
+    for (const e of untaggedSame) {
+      const { error: eTag } = await supabase.from('employees').update({ name_tag: existingTags[e.id].trim() }).eq('id', e.id)
+      if (eTag) {
+        setError(/name_tag/.test(eTag.message) ? '구분 칸이 아직 DB에 없어요 — supabase/migrations/2026-11-17_name_tag.sql 을 먼저 실행해주세요.' : eTag.message)
+        setSaving(false); return
+      }
     }
     try {
-      const emp = await addHireToRoster({ name: name.trim(), division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, role, join_date: joinDate, level, backfillFullTenure })
+      const emp = await addHireToRoster({ name: name.trim(), nameTag: sameNameEmps.length > 0 ? nameTag : '', division: divisionVal || null, dept: deptVal || null, team: teamVal || null, locations, rank, track, role, join_date: joinDate, level, backfillFullTenure })
       onCreated(emp)
     } catch (err) {
       setError(err.message)
@@ -449,8 +470,24 @@ export function QuickAddHireModal({ onClose, onCreated, initial = {} }) {
             </div>
             {nameMatches.map((e) => (
               <div key={e.id} style={{ color: '#475569', padding: '2px 0' }}>
-                <b>{e.name}</b>
+                <b>{displayName(e)}</b>
                 <span style={{ color: '#94a3b8', marginLeft: 8 }}>{orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {sameNameEmps.length > 0 && (
+          <div style={{ border: '1px solid #fed7aa', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: '#b45309', fontWeight: 600, marginBottom: 6 }}>
+              동명이인 구분 — 화면에 "{name.trim()}(구분)"으로 보여요. 아마란스 표기와 같게 적어주세요 (예: 생산)
+            </div>
+            <label style={lbl}>새 입사자 구분</label>
+            <input style={field} value={nameTag} onChange={(e) => setNameTag(e.target.value)} placeholder="예: 생산" />
+            {untaggedSame.map((e) => (
+              <div key={e.id}>
+                <label style={lbl}>기존 {e.name} 구분 <span style={{ color: '#94a3b8', fontWeight: 400 }}>({orgPath(e) || '소속 없음'} · {e.rank || '-'})</span></label>
+                <input style={field} value={existingTags[e.id] || ''} onChange={(ev) => setExistingTags({ ...existingTags, [e.id]: ev.target.value })} placeholder="예: 연구" />
               </div>
             ))}
           </div>
@@ -575,10 +612,10 @@ function QuickAddResignModal({ onClose, onCreated }) {
   const matches = useMemo(() => {
     if (picked || !query.trim()) return []
     const q = query.trim().toLowerCase()
-    return employees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 8)
+    return employees.filter((e) => displayName(e).toLowerCase().includes(q)).slice(0, 8)
   }, [employees, query, picked])
 
-  const pick = (e) => { setPicked(e); setQuery(e.name) }
+  const pick = (e) => { setPicked(e); setQuery(displayName(e)) }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -618,7 +655,7 @@ function QuickAddResignModal({ onClose, onCreated }) {
                   onMouseEnter={(ev) => { ev.currentTarget.style.background = '#f8fafc' }}
                   onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
                 >
-                  <span style={{ fontWeight: 600 }}>{e.name}</span>
+                  <span style={{ fontWeight: 600 }}>{displayName(e)}</span>
                   <span style={{ color: '#94a3b8', marginLeft: 8 }}>
                     {orgPath(e)} · {e.rank}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
                   </span>
@@ -856,7 +893,7 @@ function ChangeGroup({ title, items, checked, onToggle, kind }) {
                       <b>{r.name}</b> <span style={{ color: '#64748b' }}>{r.rank} · {r.dept} · {r.date}{kind === 'resign' && r.tenure != null ? ` · 근속 ${r.tenure}년` : ''}</span>
                       {r.sameNameEmployees?.map((e) => (
                         <div key={e.id} style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
-                          기존: {e.name} · {orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
+                          기존: {displayName(e)} · {orgPath(e) || '소속 없음'} · {e.rank || '-'}{e.join_date ? ` · 입사 ${e.join_date}` : ''}
                         </div>
                       ))}
                     </>

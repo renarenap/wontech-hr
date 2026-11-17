@@ -9,6 +9,7 @@ create extension if not exists pgcrypto;
 create table if not exists employees (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  name_tag text,  -- 동명이인 구분(같은 이름이 여러 명일 때만): 화면엔 "이준영(생산)"처럼 표시, 아마란스 표기와 동일
   -- 소속 3단계: 실(division, 신규) → 팀(dept, 기존 '소속') → 파트(team, 기존 '팀'). 컬럼명은 마이그레이션 비용 때문에 유지.
   division text,
   dept text,  -- 실→파트로 바로 이어지고 팀 단계가 없는 조직도 있어서 필수 아님(실/팀/파트 중 최소 하나는 앱에서 검증)
@@ -228,6 +229,7 @@ create table if not exists employees_archive (
   id uuid primary key default gen_random_uuid(),
   original_id uuid,
   name text not null,
+  name_tag text,
   division text, dept text, team text, locations text[], rank text, track text, role text,
   level int, req_tenure int, threshold int,
   base_pts numeric, backfill_full_tenure boolean, leave_years numeric, eng_pts numeric, eng_lifetime boolean,

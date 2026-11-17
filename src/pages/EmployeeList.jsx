@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, editTransfers, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O } from '../lib/constants'
+import { sortByPeriod, TRACKS, TRACK_LABEL, STATUS_LABEL, LOCATIONS, EXEC_RANKS, ORG_LEVEL_LABEL, orgPath, editTransfers, GRADE_COLOR, nearestGrade, baseRank, P, B, G, R, O, displayName } from '../lib/constants'
 import { deriveEmployee, evalCount, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { fetchLevelReferenceYear, fetchLatestBumpBatch, applyLevelBump, undoLevelBump } from '../lib/levelBump'
 import { Bd, GB, NoteFlagBadge, LocationBadges, Prog, TenureBar, Tip, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, btnPrimary, btnGhost } from '../components/ui'
@@ -35,6 +35,7 @@ const CATEGORY_LABEL = { ...TRACK_LABEL, 부장수석: '부장/수석', 임원: 
 const CSV_COLUMNS = [
   { key: 'id', label: 'id' },
   { key: 'name', label: '이름' },
+  { key: 'name_tag', label: '구분(동명이인만, 예: 생산)' },
   { key: 'join_date', label: '입사일(YYYYMMDD 또는 YYYY-MM-DD)' },
   { key: 'locations', label: '위치(대전/판교/해외법인, 복수는 쉼표로 구분)' },
   { key: 'division', label: ORG_LEVEL_LABEL.division },
@@ -60,7 +61,7 @@ const CSV_COLUMNS = [
   { key: 'tech_pts', label: '(참고)기술성과가점 — 상세화면 "기술성과"에서 건별 등록' },
   { key: 'currentPts', label: '(참고)현재포인트' },
 ]
-const CSV_EDITABLE_KEYS = ['name', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'role', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'cn_pts', 'cn_lifetime', 'jp_pts', 'jp_lifetime', 'award_pts', 'note_flag']
+const CSV_EDITABLE_KEYS = ['name', 'name_tag', 'join_date', 'locations', 'division', 'dept', 'team', 'rank', 'role', 'track', 'level', 'leave_years', 'leave_start_date', 'leave_end_date', 'backfill_full_tenure', 'eng_pts', 'eng_lifetime', 'cn_pts', 'cn_lifetime', 'jp_pts', 'jp_lifetime', 'award_pts', 'note_flag']
 const CSV_BOOL_KEYS = new Set(['backfill_full_tenure', 'eng_lifetime', 'cn_lifetime', 'jp_lifetime'])
 const CSV_NUM_KEYS = new Set(['level', 'leave_years', 'eng_pts', 'cn_pts', 'jp_pts', 'award_pts'])
 // 상태 정렬용 우선순위 — 낮을수록(승진 가능) 먼저 옴
@@ -334,7 +335,7 @@ export default function EmployeeList() {
   const filtered = useMemo(() => {
     if (!employees) return []
     let l = scopedByTrack.filter((e) => {
-      if (search && !e.name.includes(search) && !(e.dept || '').includes(search) && !(e.team || '').includes(search) && !(e.division || '').includes(search)) return false
+      if (search && !displayName(e).includes(search) && !(e.dept || '').includes(search) && !(e.team || '').includes(search) && !(e.division || '').includes(search)) return false
       if (rankF !== 'all' && e.rank !== rankF) return false
       if (locF !== 'all' && !(e.locations || []).includes(locF)) return false
       if (divF !== 'all' && e.division !== divF) return false
@@ -512,7 +513,7 @@ export default function EmployeeList() {
                   <td style={tdS} onClick={(ev) => ev.stopPropagation()}>
                     <input type="checkbox" checked={selectedIds.has(e.id)} onChange={() => toggleSelect(e.id)} />
                   </td>
-                  <td style={{ ...tdS, fontWeight: 600 }}>{e.name}</td>
+                  <td style={{ ...tdS, fontWeight: 600 }}>{displayName(e)}</td>
                   <td style={tdS}><LocationBadges locations={e.locations} /></td>
                   <td style={{ ...tdS, color: '#64748b' }}>
                     {orgExpanded ? orgPath(e) : (e.team || e.dept || e.division || '—')}
@@ -767,6 +768,7 @@ function ExportImportModal({ employees, onClose, onApplied }) {
         if (pickByPrefix(raw, '직군(').trim() === '임원' && EXEC_RANKS.includes(baseRank(emp.rank))) patch.track = emp.track
         const changed = {}
         CSV_EDITABLE_KEYS.forEach((k) => {
+          if (!(k in patch)) return // 예전 CSV처럼 그 컬럼이 아예 없으면 비교하지 않음(구분 등)
           const newVal = patch[k]
           const oldVal = emp[k]
           let oldNorm, newNorm
@@ -777,7 +779,9 @@ function ExportImportModal({ employees, onClose, onApplied }) {
         })
         if (Object.keys(changed).length > 0) {
           const transfers = editTransfers(emp, { ...emp, ...patch }, (t) => TRACK_LABEL[t] || t)
-          out.push({ key: id, kind: 'update', id, name: emp.name, changed, patch, transfers, errors: validatePatch(patch) })
+          // 구분은 바뀌었을 때만 보냄 — 마이그레이션 전 DB(컬럼 없음)에서도 나머지 반영은 되게
+          if ('name_tag' in patch && !changed.name_tag) delete patch.name_tag
+          out.push({ key: id, kind: 'update', id, name: displayName(emp), changed, patch, transfers, errors: validatePatch(patch) })
         }
       })
       setRows(out)
@@ -994,6 +998,13 @@ function buildPatch(raw) {
       const v = pickByPrefix(raw, '비고평가(').trim()
       return ['+', '-', 'o'].includes(v) ? v : 'o'
     })(),
+  }
+  // 구분 컬럼이 있는 CSV일 때만 반영 — 예전 CSV를 올려도 구분이 지워지지 않게
+  const tagKey = Object.keys(raw).find((k) => k.startsWith('구분('))
+  if (tagKey) {
+    const tag = (raw[tagKey] || '').trim()
+    if (tag) patch.name_tag = tag
+    else if (raw.id) patch.name_tag = null
   }
   return patch
 }

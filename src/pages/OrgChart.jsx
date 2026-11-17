@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank, headLevelOf, concurrentPostsOf } from '../lib/constants'
+import { P, G, B, Y, O, ORG_LEVEL_LABEL, OFFICE_RANKS, RESEARCH_RANKS, EXEC_RANKS, EXEC_CANDIDATE_RANKS, baseRank, headLevelOf, concurrentPostsOf, displayName } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost } from '../components/ui'
 
 // ═══ 조직도 — 부문 → 본부 → 팀 ═══
@@ -107,7 +107,7 @@ export default function OrgChart() {
     const keys = new Set()
     allNodes.forEach((n) => {
       const hit = (n.name || '').toLowerCase().includes(query)
-        || (n.children.length === 0 && n.members.some((m) => (m.name || '').toLowerCase().includes(query)))
+        || (n.children.length === 0 && n.members.some((m) => displayName(m).toLowerCase().includes(query)))
       if (hit) for (let i = 1; i <= n.path.length; i++) keys.add(keyOf(n.path.slice(0, i)))
     })
     return keys
@@ -129,7 +129,7 @@ export default function OrgChart() {
   // 조직장 지정/해제 — 직책(role)을 부문장/본부장/팀장 ↔ 팀원으로 바꿈
   const setHead = async (m, level, on) => {
     const role = on ? headLabel(level) : '팀원'
-    const msg = on ? `${m.name}님을 ${role}으로 지정할까요?` : `${m.name}님의 ${m.role || '조직장'} 지정을 해제할까요? (직책이 '팀원'으로 바뀝니다)`
+    const msg = on ? `${displayName(m)}님을 ${role}으로 지정할까요?` : `${displayName(m)}님의 ${m.role || '조직장'} 지정을 해제할까요? (직책이 '팀원'으로 바뀝니다)`
     if (!window.confirm(msg)) return
     const { error: err } = await supabase.from('employees').update({ role }).eq('id', m.id)
     if (err) { window.alert(`저장하지 못했어요: ${err.message}`); return }
@@ -382,7 +382,7 @@ function NodeDetail({ node, isAdmin, onEdit, onSetHead }) {
           <tbody>
             {members.map((m) => (
               <tr key={m.id}>
-                <td style={{ ...tdS, fontWeight: 600 }}><Link to={`/employees/${m.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{m.name}</Link>{isHead(m) && <span style={{ marginLeft: 6 }}><Bd color={O} bg="#fff7ed">{headTitle(m, node.level)}</Bd></span>}</td>
+                <td style={{ ...tdS, fontWeight: 600 }}><Link to={`/employees/${m.id}`} style={{ color: 'var(--text)', textDecoration: 'none' }}>{displayName(m)}</Link>{isHead(m) && <span style={{ marginLeft: 6 }}><Bd color={O} bg="#fff7ed">{headTitle(m, node.level)}</Bd></span>}</td>
                 <td style={tdS}>{m.rank || '—'}</td>
                 {LEVELS.slice(depth + 1).map((l) => <td key={l} style={{ ...tdS, color: m[l] ? 'var(--text)' : '#cbd5e1' }}>{m[l] || '—'}</td>)}
                 <td style={tdS}><LocationBadges locations={m.locations} /></td>

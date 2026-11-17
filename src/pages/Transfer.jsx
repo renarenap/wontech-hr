@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, ORG_HEAD_ROLES, orgPath, concurrentPostsOf, postLabel } from '../lib/constants'
+import { P, G, O, Y, R, B, DEPT_OPTIONS, ORG_LEVEL_LABEL, ORG_HEAD_ROLES, orgPath, concurrentPostsOf, postLabel, displayName } from '../lib/constants'
 import { Bd, KpiRow, LocationBadges, crd, thS, tdS, inp, Loading, ErrorBox, EmptyState, Modal, field, label as lbl, btnPrimary, btnGhost, AddButton, CascadeSelect } from '../components/ui'
 
 const TYPE_CFG = {
@@ -207,7 +207,7 @@ function AddTransferModal({ onClose, onCreated }) {
   const matches = useMemo(() => {
     if (picked || !form.name.trim()) return []
     const q = form.name.trim().toLowerCase()
-    return employees.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 8)
+    return employees.filter((e) => displayName(e).toLowerCase().includes(q)).slice(0, 8)
   }, [employees, form.name, picked])
 
   const pick = (e) => {
@@ -305,7 +305,7 @@ function AddTransferModal({ onClose, onCreated }) {
                   onMouseEnter={(ev) => { ev.currentTarget.style.background = '#f8fafc' }}
                   onMouseLeave={(ev) => { ev.currentTarget.style.background = 'transparent' }}
                 >
-                  <span style={{ fontWeight: 600 }}>{e.name}</span>
+                  <span style={{ fontWeight: 600 }}>{displayName(e)}</span>
                   <span style={{ color: '#94a3b8', marginLeft: 8 }}>{orgPath(e)} · {e.rank}</span>
                   <span style={{ marginLeft: 8 }}><LocationBadges locations={e.locations} /></span>
                 </div>
