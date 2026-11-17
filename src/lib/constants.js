@@ -133,6 +133,10 @@ export function orgPath(e) {
   return [e?.division, e?.dept, e?.team].filter(Boolean).join(' · ')
 }
 
+// ═══ 동명이인 구분 — employees.name_tag: 같은 이름이 여러 명일 때만 채움, 화면엔 "이준영(생산)"처럼 표시 (아마란스 표기와 동일) ═══
+// (마이그레이션 2026-11-17_name_tag.sql 실행 전이면 컬럼이 없어서 undefined — 이름만 표시)
+export const displayName = (e) => (e?.name ? (e.name_tag ? `${e.name}(${e.name_tag})` : e.name) : '')
+
 // ═══ 겸직 — employees.concurrent_posts: 본 소속 외에 추가로 맡는 [{division, dept, team, role}] ═══
 // (마이그레이션 2026-10-20_concurrent_posts.sql 실행 전이면 컬럼이 없어서 undefined — 빈 배열로 취급)
 export const concurrentPostsOf = (e) => (Array.isArray(e?.concurrent_posts) ? e.concurrent_posts : [])

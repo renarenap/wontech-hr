@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { O, P, G, Y, R, B, TRACK_LABEL } from '../lib/constants'
+import { O, P, G, Y, R, B, TRACK_LABEL, displayName } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate, CATEGORIES } from '../lib/promotion'
 import { KpiRow, Prog, crd, thS, tdS, Loading, ErrorBox, EmptyState } from '../components/ui'
 
@@ -152,7 +152,7 @@ export default function Dashboard() {
                     onMouseEnter={(ev) => (ev.currentTarget.style.background = '#f8fafc')}
                     onMouseLeave={(ev) => (ev.currentTarget.style.background = 'transparent')}
                   >
-                    <td style={{ ...tdS, color: '#111827', fontWeight: 700 }}>{e.name}</td>
+                    <td style={{ ...tdS, color: '#111827', fontWeight: 700 }}>{displayName(e)}</td>
                     <td style={tdS}>{e.rank}</td>
                     <td style={tdS}><Prog current={e.currentPts} max={e.threshold} /></td>
                   </tr>

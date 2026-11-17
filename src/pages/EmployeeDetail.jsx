@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../lib/auth'
-import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, concurrentPostsOf, postLabel, editTransfers, O, P, G, Y, R, B } from '../lib/constants'
+import { GRADE_COLOR, GRADE_HEIGHT, SIM_GRADE_POINTS, TRACK_LABEL, TRACKS, ORG_LEVEL_LABEL, DEPT_OPTIONS, orgPath, concurrentPostsOf, postLabel, editTransfers, O, P, G, Y, R, B, displayName } from '../lib/constants'
 import { deriveEmployee, fetchRankCriteria, fetchLeaveRate } from '../lib/promotion'
 import { fetchPendingPointLog, resolvePendingBackfill } from '../lib/pendingPoints'
 import { fetchEvalComments, addEvalComment, deleteEvalComment } from '../lib/evalComments'
@@ -153,7 +153,7 @@ export default function EmployeeDetail() {
       <div style={{ ...crd, marginTop: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{view.name}</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{displayName(view)}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
               <LocationBadges locations={view.locations} />
               <div style={{ fontSize: 12, color: '#64748b' }}>
@@ -393,6 +393,7 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
   const e = employee
   const [form, setForm] = useState({
     name: e.name || '',
+    name_tag: e.name_tag || '',
     join_date: e.join_date || '',
     locations: e.locations || [],
     division: e.division || '',
@@ -471,6 +472,14 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
     if (posts.some((p) => !postVal(p, 'division') && !postVal(p, 'dept') && !postVal(p, 'team'))) {
       setError('겸직 줄에 소속이 비어 있어요 — 고르거나 ✕로 지워주세요'); return
     }
+    // 동명이인 확인 — 같은 이름이 또 있으면 둘 다 구분이 있어야 하고, 구분이 서로 달라야 함
+    const nm = form.name.trim(), tag = form.name_tag.trim()
+    const { data: sameName, error: eDup } = await supabase.from('employees').select('*').eq('name', nm).neq('id', e.id)
+    if (eDup) { setError(eDup.message); return }
+    if (sameName?.length) {
+      if (!tag) { setError(`같은 이름의 직원이 또 있어요 (${sameName.map(displayName).join(', ')}) — 구분을 입력해주세요`); return }
+      if (sameName.some((o) => (o.name_tag || '') === tag)) { setError(`'${nm}(${tag})'은(는) 이미 있어요 — 다른 구분을 입력해주세요`); return }
+    }
     setSaving(true)
     // 휴직시작·종료일이 둘 다 있으면 그걸로 휴직연차를 자동 계산(우선), 없으면 휴직연차 칸을 그대로 씀
     const autoLeaveYears = monthsBetween(form.leave_start_date, form.leave_end_date)
@@ -491,6 +500,8 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       backfill_full_tenure: form.backfill_full_tenure,
       award_pts: Number(form.award_pts) || 0,
     }
+    // 구분은 바뀌었을 때만 보냄 — 마이그레이션 전 DB(컬럼 없음)에서도 나머지 수정은 되게
+    if (tag !== (e.name_tag || '')) patch.name_tag = tag || null
     // 겸직은 바뀌었을 때만 보냄 — 마이그레이션 전 DB(컬럼 없음)에서도 나머지 수정은 되게
     const nextPosts = cleanPosts()
     if (JSON.stringify(nextPosts) !== JSON.stringify(concurrentPostsOf(e))) patch.concurrent_posts = nextPosts
@@ -499,7 +510,9 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
       setSaving(false)
       setError(/concurrent_posts/.test(err.message)
         ? '겸직 칸이 아직 DB에 없어요 — supabase/migrations/2026-10-20_concurrent_posts.sql 을 먼저 실행해주세요.'
-        : err.message)
+        : /name_tag/.test(err.message)
+          ? '구분 칸이 아직 DB에 없어요 — supabase/migrations/2026-11-17_name_tag.sql 을 먼저 실행해주세요.'
+          : err.message)
       return
     }
     if (logTransfer && pendingTransfers.length) {
@@ -513,10 +526,15 @@ function EditEmployeeModal({ employee, onClose, onSaved }) {
   }
 
   return (
-    <Modal title={`${e.name} 정보 수정`} onClose={onClose} width={520}>
+    <Modal title={`${displayName(e)} 정보 수정`} onClose={onClose} width={520}>
       <form onSubmit={submit}>
-        <label style={lbl}>이름</label>
-        <input style={field} required value={form.name} onChange={set('name')} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 2 }}><label style={lbl}>이름</label><input style={field} required value={form.name} onChange={set('name')} /></div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>구분 <span style={{ color: '#94a3b8', fontWeight: 400 }}>(동명이인만)</span></label>
+            <input style={field} value={form.name_tag} onChange={set('name_tag')} placeholder="예: 생산" />
+          </div>
+        </div>
 
         <label style={lbl}>입사일</label>
         <input style={field} type="date" value={form.join_date} onChange={set('join_date')} />
